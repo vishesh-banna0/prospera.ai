@@ -4,507 +4,286 @@
 
 ## Overview
 
-Prospera is an Agentic Financial Intelligence Platform designed to help users make better investment decisions through a combination of market data, financial research, news analysis, prediction models, portfolio simulation, and AI-driven reasoning.
+Prospera is an agentic financial intelligence platform designed to turn market data, news, research, and predictive models into explainable investment intelligence.
 
-Unlike traditional stock prediction systems, Prospera focuses on building a complete financial intelligence ecosystem that combines structured financial data, unstructured research documents, market sentiment, forecasting models, and explainable decision-making.
+The platform starts with a strong backend foundation: a multi-environment market simulator powered by a centralized market data service. Over time, that foundation expands into research, reasoning, prediction, backtesting, and autonomous portfolio management.
 
-The platform begins as a market simulator and gradually evolves into a multi-agent financial intelligence system capable of portfolio analysis, market reasoning, backtesting, and reinforcement learning-based portfolio optimization.
+## Current Scope
 
----
+The current focus is **V1 backend foundation**.
 
-## Vision
+V1 includes:
+- A market simulator engine
+- Isolated portfolio environments
+- A centralized market data service
+- Clean backend architecture for future expansion
 
-The goal of Prospera is not simply to predict market movements.
+V1 does not yet include:
+- News intelligence pipelines
+- Research RAG implementation
+- Prediction model training
+- RL agents
+- Full frontend implementation
 
-The goal is to build an intelligent system capable of:
+## Product Vision
 
-* Understanding financial information
-* Analyzing market conditions
-* Evaluating investment opportunities
-* Explaining decisions
-* Simulating investment strategies
-* Learning from historical outcomes
+Prospera is being designed to support:
+- Market simulation
+- Portfolio management
+- Market data intelligence
+- News intelligence
+- Financial research RAG
+- Company analysis
+- Prediction models
+- Backtesting
+- F&O intelligence
+- Multi-agent reasoning
+- Reinforcement learning
 
----
+The long-term goal is not just prediction. The goal is to build a transparent and explainable financial intelligence system that helps users and AI agents make higher-quality investment decisions.
 
-## Core Features
+## Architecture Principles
 
-### Market Simulator
+The backend is being built around a few strict principles:
+- Clean Architecture
+- Separation of concerns
+- Service layer pattern
+- Isolated business modules
+- Shared market data access through one internal service
+- Minimal V1 scope with room for future scale
 
-* Virtual trading environment
-* Portfolio management
-* Transaction tracking
-* Profit and loss analysis
-* Watchlists
+## System Overview
 
-### Financial Intelligence Engine
+The core system is centered on two foundation components:
+- `Market Data Service`: the single internal gateway for quotes, history, symbol lookup, and metadata
+- `Market Simulator`: the isolated environment engine used by users, AI agents, and future RL agents
 
-* Market data analysis
-* Company research
-* Financial statement analysis
-* Investment signal generation
-* Explainable recommendations
+```mermaid
+flowchart TD
+    FE[Frontend / Future UI]
+    API[FastAPI API Layer]
+    MDS[Market Data Service]
+    SIM[Market Simulator Engine]
+    ENV1[User Environment]
+    ENV2[AI Environment]
+    ENV3[RL / Backtesting Environment]
+    EXT[External Market APIs]
+    DB[(PostgreSQL)]
+    CACHE[(Redis - Future)]
 
-### News Intelligence
-
-* Financial news aggregation
-* Event extraction
-* Sentiment analysis
-* Market impact detection
-* Company-specific signal generation
-
-### Financial Research RAG
-
-* Annual reports
-* Earnings call transcripts
-* Investor presentations
-* Research reports
-* Semantic search over financial documents
-
-### Prediction Models
-
-* Traditional machine learning models
-* Time-series forecasting
-* Market trend prediction
-* Signal generation
-
-### F&O Intelligence
-
-* Option chain analysis
-* Open Interest analysis
-* Put Call Ratio analysis
-* Derivatives sentiment indicators
-
-### Multi-Agent Architecture
-
-* News Agent
-* Research Agent
-* Market Agent
-* Company Agent
-* Prediction Agent
-* F&O Agent
-* Reasoning Agent
-
-### Reinforcement Learning
-
-* Portfolio optimization
-* Dynamic allocation strategies
-* Risk-adjusted decision making
-* Learning through market simulation
-
----
-
-## Project Philosophy
-
-Prospera follows a signal-first architecture.
-
-Instead of relying on a single prediction model, the platform combines multiple sources of intelligence:
-
-```text
-Market Data
-+
-Financial Research
-+
-News Signals
-+
-F&O Signals
-+
-Prediction Models
-+
-Reasoning Engine
-
-↓
-
-Investment Intelligence
+    FE --> API
+    API --> SIM
+    API --> MDS
+    EXT --> MDS
+    MDS --> CACHE
+    MDS --> SIM
+    SIM --> ENV1
+    SIM --> ENV2
+    SIM --> ENV3
+    SIM --> DB
 ```
 
-The objective is to generate explainable and evidence-based decisions rather than black-box predictions.
+## V1 Simulator Flow
 
----
+Each simulator environment is independent. All environments use the same market data service, but each one maintains its own cash, holdings, transactions, and performance history.
 
-## Project Component Flow
-
-The diagram below shows how Prospera is expected to evolve from the V1 simulator foundation into the larger financial intelligence platform.
-
-```text
-                                      +----------------------+
-                                      |      Frontend        |
-                                      | Next.js / React UI   |
-                                      +----------+-----------+
-                                                 |
-                                                 v
-                                      +----------------------+
-                                      |      API Layer       |
-                                      | FastAPI Endpoints    |
-                                      +----------+-----------+
-                                                 |
-                      +--------------------------+--------------------------+
-                      |                                                     |
-                      v                                                     v
-         +---------------------------+                         +---------------------------+
-         |   Market Simulator V1     |                         |   Market Data Service     |
-         | Core trading foundation   |<------------------------| Shared quote/history hub  |
-         | for isolated environments |                         | for all internal clients  |
-         +-------------+-------------+                         +-------------+-------------+
-                       |                                                             |
-         +-------------+-------------+                                  +------------+------------+
-         |                           |                                  |                         |
-         v                           v                                  v                         v
-+-------------------+    +-------------------------+      +-------------------------+  +----------------------+
-| User Environments |    | AI / RL Environments    |      | External Market APIs    |  | Future Cache Layer   |
-| Manual portfolios |    | Agent-controlled sims   |      | Quotes / history data   |  | Redis / fast reads   |
-+-------------------+    +-------------------------+      +-------------------------+  +----------------------+
-         |
-         v
-+---------------------------+
-| Holdings / Trades / P&L   |
-| Transactions / Performance|
-+---------------------------+
-
-
-Future intelligence layers built on top of the same foundation:
-
-                                      +----------------------+
-                                      |   News Intelligence  |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Research RAG Engine  |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Company Analysis     |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Prediction Models    |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Signal Fusion Layer  |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Reasoning / Agents   |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | AI Portfolio Manager |
-                                      +----------+-----------+
-                                                 |
-                                      +----------v-----------+
-                                      | Backtesting / RL     |
-                                      +----------------------+
+```mermaid
+flowchart LR
+    A[Create Environment] --> B[Add Virtual Cash]
+    B --> C[Buy / Sell Stocks]
+    C --> D[Update Holdings]
+    C --> E[Record Transactions]
+    D --> F[Calculate Portfolio Performance]
+    E --> F
+    M[Market Data Service] --> C
+    M --> F
 ```
 
-### Diagram Reading Guide
+## Intelligence Evolution Flow
 
-- `Market Data Service` is the shared internal gateway for prices, history, symbol search, and metadata.
-- `Market Simulator V1` is the first production foundation and supports isolated user, AI, and future RL environments.
-- Future modules should build on top of these shared foundations instead of bypassing them.
+The V1 simulator is the foundation. Future intelligence layers will be built on top of the same shared data and portfolio infrastructure.
 
----
+```mermaid
+flowchart TD
+    MDS[Market Data Service]
+    NEWS[News Intelligence]
+    RAG[Financial Research RAG]
+    CA[Company Analysis]
+    PM[Prediction Models]
+    SF[Signal Fusion]
+    RE[Reasoning Engine]
+    APM[AI Portfolio Manager]
+    BT[Backtesting Engine]
+    RL[RL Portfolio Agent]
 
-## System Roadmap
+    MDS --> NEWS
+    MDS --> CA
+    MDS --> PM
+    NEWS --> SF
+    RAG --> SF
+    CA --> SF
+    PM --> SF
+    SF --> RE
+    RE --> APM
+    APM --> BT
+    APM --> RL
+```
 
-### Phase 1
+## Daily Intelligence Pipeline
 
-* System Design
-* Infrastructure Setup
-* Database Architecture
+At maturity, Prospera is expected to operate as a continuous intelligence pipeline.
 
-### Phase 2
+```mermaid
+flowchart TD
+    A[Market Data]
+    B[Financial News]
+    C[Company Information]
+    D[Financial Research]
+    E[Data Processing]
+    F[Signal Generation]
+    G[Reasoning Engine]
+    H[Investment Recommendations]
+    I[Portfolio Decisions]
+    J[Performance Evaluation]
+    K[Continuous Learning]
 
-* Market Simulator
-* Portfolio Management
-* Market Data Pipeline
-
-### Phase 3
-
-* News Aggregation
-* Event Extraction
-* Sentiment Analysis
-
-### Phase 4
-
-* Financial Research RAG
-* Company Intelligence Engine
-
-### Phase 5
-
-* Financial Reasoning Agent
-* Explainable Decision Engine
-
-### Phase 6
-
-* Prediction Models
-* Signal Fusion Layer
-
-### Phase 7
-
-* AI Portfolio Management
-* Historical Backtesting
-
-### Phase 8
-
-* F&O Intelligence
-* Multi-Agent System
-
-### Phase 9
-
-* Reinforcement Learning Portfolio Manager
-
-### Phase 10
-
-* Production Deployment
-* Monitoring
-* Scaling
-
----
-
-## Long-Term Goals
-
-* Build a fully explainable financial intelligence platform.
-* Create an AI-driven investment research assistant.
-* Support both retail and advanced investors.
-* Enable historical strategy testing.
-* Develop intelligent portfolio optimization systems.
-* Create a scalable multi-agent financial ecosystem.
-
----
-
-## Tech Stack (Planned)
-
-### Frontend
-
-* React
-* Next.js
-* Tailwind CSS
-
-### Backend
-
-* FastAPI
-* Python
-
-### Databases
-
-* PostgreSQL
-* Vector Database
-
-### AI & ML
-
-* Local LLMs
-* LangGraph
-* XGBoost
-* LightGBM
-* LSTM
-* Reinforcement Learning
-
-### Infrastructure
-
-* Docker
-* GitHub
-* CI/CD
-
----
+    A --> E
+    B --> E
+    C --> E
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+```
 
 ## Backend Folder Structure
 
-The V1 backend is organized around two core backend capabilities:
-
-* `simulator` for isolated market simulation environments
-* `market_data` for shared stock and price data access
+The backend is organized by responsibility, not by framework convenience.
 
 ```text
 main/
-└── backend/                           # Backend application root; contains only backend-specific architecture and composition.
-    ├── api/                           # HTTP/API transport layer; receives requests and delegates work to application services.
-    │   └── routes/                    # Endpoint groups; separate route concerns by feature area such as environments, portfolios, and market data.
-    ├── core/                          # Cross-cutting backend setup; place config, shared exceptions, and app-wide operational concerns here.
-    ├── modules/                       # Business module boundary; each subfolder should represent a clean bounded context.
-    │   ├── simulator/                 # Market simulator domain; owns isolated environments, cash, trades, holdings, and performance logic.
-    │   │   ├── domain/                # Pure business rules and domain concepts; define entities, value objects, policies, and repository contracts here.
-    │   │   ├── application/           # Use-case orchestration layer; coordinate commands, queries, and service-level workflows here.
-    │   │   └── infrastructure/        # Persistence implementations and external technical details for the simulator module belong here.
-    │   └── market_data/               # Shared market data service; this is the only module that should talk to external market data providers.
-    │       ├── domain/                # Provider-agnostic market concepts; store quote, instrument, and history abstractions here.
-    │       ├── application/           # Internal market data service contracts and use cases; expose quotes, history, search, and metadata here.
-    │       └── infrastructure/        # Vendor clients, adapters, and cache implementations for market data should live here.
-    ├── shared/                        # Small shared primitives reused across modules; keep this minimal and generic.
-    ├── app.py                         # Future backend entry point; should create and wire the FastAPI application.
-    └── __init__.py                    # Package marker for the backend root.
+└── backend/                     # Backend root and application assembly boundary
+    ├── api/                     # HTTP transport layer and route composition
+    │   └── routes/              # Endpoint groups for environments, portfolios, and market data
+    ├── core/                    # Cross-cutting configuration and shared backend concerns
+    ├── modules/                 # Business modules grouped as bounded contexts
+    │   ├── simulator/           # Isolated market simulator domain
+    │   │   ├── domain/          # Business entities, value objects, policies, repository contracts
+    │   │   ├── application/     # Commands, queries, DTOs, and service orchestration
+    │   │   └── infrastructure/  # Persistence models and repository implementations
+    │   └── market_data/         # Shared market data service boundary
+    │       ├── domain/          # Quotes, instruments, history, and provider-agnostic contracts
+    │       ├── application/     # Internal market data use cases and service contracts
+    │       └── infrastructure/  # Provider clients, adapters, and caching implementations
+    ├── shared/                  # Small shared primitives used across modules
+    ├── app.py                   # Future FastAPI entry point
+    └── __init__.py              # Backend package marker
 ```
 
-### Folder Responsibility Notes
+## Folder Responsibility Guide
 
-#### `backend/`
-
-Purpose:
-Backend root for application assembly.
-
-What should go here:
-Application bootstrap files and top-level package organization.
-
-What should not go here:
-Business rules, database queries, or vendor-specific integrations.
-
-#### `backend/api/`
+### `backend/api`
 
 Purpose:
-Transport layer that exposes backend functionality to frontend clients, users, and future agents.
+Expose backend capabilities through HTTP interfaces.
 
-What should go here:
-Routers, request/response mapping, dependency wiring, and HTTP-facing concerns.
+Should contain:
+Routers, request mapping, response mapping, and dependency wiring.
 
-What should not go here:
-Trading logic, valuation rules, persistence implementation, or direct stock API calls.
+Should not contain:
+Trading logic, database queries, or direct external market API calls.
 
-#### `backend/api/routes/`
-
-Purpose:
-Feature-based route grouping.
-
-What should go here:
-Separate endpoint files for environment lifecycle, portfolio actions, and market data reads.
-
-What should not go here:
-Shared business workflows or repository logic.
-
-#### `backend/core/`
+### `backend/core`
 
 Purpose:
-Shared backend-wide operational building blocks.
+Hold shared operational concerns used across the backend.
 
-What should go here:
-Configuration, shared exceptions, and future middleware or lifecycle helpers.
+Should contain:
+Configuration, shared exceptions, and future app lifecycle helpers.
 
-What should not go here:
-Module-specific entities, trading use cases, or provider clients.
+Should not contain:
+Business workflows or module-specific logic.
 
-#### `backend/modules/`
-
-Purpose:
-Home for backend business capabilities designed as bounded contexts.
-
-What should go here:
-Independent modules such as simulator, market data, and future domains like news or research.
-
-What should not go here:
-Generic utility dumping grounds or application bootstrap code.
-
-#### `backend/modules/simulator/`
+### `backend/modules/simulator`
 
 Purpose:
-Owns the paper-trading and environment-isolation system for V1.
+Own the V1 market simulator and environment-isolation model.
 
-What should go here:
-Environment lifecycle behavior, cash operations, trade workflows, holdings tracking, and performance-related business structure.
+Should contain:
+Environment lifecycle, cash operations, trades, holdings, transactions, and performance workflows.
 
-What should not go here:
-Direct market vendor integrations or unrelated future modules.
+Should not contain:
+Direct vendor integrations or unrelated intelligence modules.
 
-#### `backend/modules/simulator/domain/`
-
-Purpose:
-Pure simulator business language and rules.
-
-What should go here:
-Entities like environment, holding, and transaction; value objects like money or symbol; policies; repository contracts.
-
-What should not go here:
-HTTP schemas, SQLAlchemy models, or route handlers.
-
-#### `backend/modules/simulator/application/`
+### `backend/modules/market_data`
 
 Purpose:
-Use-case layer for simulator workflows.
+Provide a centralized internal gateway for market information.
 
-What should go here:
-Command handlers, query handlers, DTO definitions, and simulator service orchestration.
+Should contain:
+Quote retrieval, historical prices, symbol lookup, metadata, provider abstractions, and future cache integration.
 
-What should not go here:
-Raw SQL, ORM table definitions, or vendor API client logic.
+Should not contain:
+Portfolio rules or simulator state management.
 
-#### `backend/modules/simulator/infrastructure/`
-
-Purpose:
-Technical implementations required by the simulator module.
-
-What should go here:
-Persistence models, repository implementations, and future storage adapters.
-
-What should not go here:
-Core trading policies or route definitions.
-
-#### `backend/modules/market_data/`
+### `backend/shared`
 
 Purpose:
-Centralized market data boundary shared by all simulator environments and future AI/RL consumers.
+Provide small reusable primitives shared across modules.
 
-What should go here:
-Everything related to quotes, historical prices, symbol lookup, metadata, provider abstraction, and cache strategy.
+Should contain:
+Identifiers, timestamps, enums, and generic shared types.
 
-What should not go here:
-Portfolio rules, environment state changes, or simulator-specific business workflows.
+Should not contain:
+Large generic utility collections or feature-specific code.
 
-#### `backend/modules/market_data/domain/`
+## Tech Stack
 
-Purpose:
-Common market data concepts independent of any specific provider.
+### Backend
 
-What should go here:
-Instrument entities, quote abstractions, historical price concepts, and repository contracts.
+- Python
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Alembic
+- PostgreSQL
+- Redis
 
-What should not go here:
-Vendor response parsing, HTTP client code, or cache wiring.
+### Frontend
 
-#### `backend/modules/market_data/application/`
+- Next.js
+- React
+- Tailwind CSS
 
-Purpose:
-Internal service layer for market data access.
+### AI and ML
 
-What should go here:
-Use cases and service contracts for quote retrieval, historical data access, symbol search, and metadata retrieval.
+- LangGraph
+- Local LLMs
+- XGBoost
+- LightGBM
+- PyTorch
+- Reinforcement Learning
 
-What should not go here:
-Concrete vendor implementations or simulator trade orchestration.
+### Infrastructure
 
-#### `backend/modules/market_data/infrastructure/`
+- Docker
+- GitHub
+- GitHub Actions
 
-Purpose:
-Concrete integration layer for external market data systems.
+## Backend Environment Setup
 
-What should go here:
-Provider clients, adapters, retry strategy hooks, and cache implementations.
+The backend should currently be set up with **Python 3.11**.
 
-What should not go here:
-Simulator entities, route handlers, or business policies.
+Python `3.14` may fail while installing dependencies in this stack because some packages, especially `pydantic-core`, may not resolve cleanly there in this environment.
 
-#### `backend/shared/`
-
-Purpose:
-Small shared building blocks used across multiple modules.
-
-What should go here:
-Common IDs, timestamps, enums, and generic type definitions.
-
-What should not go here:
-Large helper collections, feature-specific logic, or cross-module shortcuts that weaken boundaries.
-
----
-
-## Backend Environment Notes
-
-The backend should currently be set up with Python `3.12`.
-
-Python `3.14` may fail while installing backend dependencies because some packages in the FastAPI
-and Pydantic stack do not consistently resolve prebuilt wheels for that interpreter yet in this setup.
-
-Recommended commands:
+Recommended setup:
 
 ```powershell
 cd "c:\Users\vishe\OneDrive\Desktop\VS Code Workspaces\prospera.ai"
-py -3.12 -m venv .venv
+py -3.11 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
@@ -512,10 +291,35 @@ pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
-If you already created `.venv` with Python `3.14`, recreate the environment using Python `3.12`.
+If a previous `.venv` was created with Python `3.14`, recreate it with Python `3.11`.
 
----
+## Roadmap
 
-## Mission Statement
+### Phase 1
+- System design
+- Backend architecture
+- Environment setup
+- Database planning
+
+### Phase 2
+- Market simulator engine
+- Portfolio operations
+- Market data service
+
+### Phase 3
+- News collection and event extraction
+- Research ingestion and RAG foundation
+
+### Phase 4
+- Company analysis
+- Prediction models
+- Signal fusion and reasoning
+
+### Phase 5
+- AI portfolio manager
+- Backtesting engine
+- RL environment integration
+
+## Mission
 
 Prospera exists to help people navigate uncertainty, transform information into insight, and make intelligent decisions that contribute to long-term prosperity.

@@ -12,13 +12,13 @@ The frontend can be added later without changing this Python environment foundat
 
 ## Recommended Setup
 
-0. Use Python 3.12
+0. Use Python 3.11
 
 ```powershell
 python --version
 ```
 
-Prospera backend setup should currently use Python 3.12.
+Prospera backend setup should currently use Python 3.11.
 
 Python 3.14 may fail during dependency installation because some packages in the backend stack,
 especially `pydantic-core`, may not yet provide a compatible prebuilt wheel for that interpreter
@@ -27,7 +27,7 @@ in your environment.
 1. Create a virtual environment
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.11 -m venv .venv
 ```
 
 2. Activate the virtual environment
@@ -61,4 +61,4 @@ Copy-Item .env.example .env
 - `requirements.txt` is intentionally backend-focused.
 - Frontend dependencies should be added later in their own frontend workspace.
 - Database migrations, Docker files, and CI setup can be added once backend implementation begins.
-- If you already created `.venv` using Python 3.14, delete that virtual environment and recreate it with Python 3.12.
+- If you already created `.venv` using Python 3.14, delete that virtual environment and recreate it with Python 3.11.
