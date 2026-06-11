@@ -6,22 +6,35 @@
 
 # Project Vision
 
-Prospera is an Agentic Financial Intelligence Platform that combines:
+Prospera is an agentic financial intelligence platform that combines:
 
-* Market Simulation
-* Portfolio Management
-* News Intelligence
-* Financial Research
-* Company Analysis
-* Prediction Models
-* F&O Intelligence
-* Multi-Agent Systems
-* Reinforcement Learning
+* Market simulation
+* Portfolio management
+* News intelligence
+* Financial research
+* Company analysis
+* Prediction models
+* F&O intelligence
+* Multi-agent systems
+* Reinforcement learning
 * Explainable AI
 
 The goal is not simply to predict stock prices.
 
 The goal is to build a complete intelligence system capable of understanding financial information, generating investment insights, evaluating opportunities, and continuously learning from market outcomes.
+
+---
+
+# Current Priority
+
+The immediate priority is the **V1 backend foundation**:
+
+* Market simulator architecture
+* Isolated environments
+* Centralized market data service
+* Backend environment setup
+* Clean folder structure
+* Future-ready design without premature complexity
 
 ---
 
@@ -83,51 +96,62 @@ The goal is to build a complete intelligence system capable of understanding fin
 
 # System Architecture
 
-```text
-Frontend (Next.js)
+```mermaid
+flowchart TD
+    FE[Frontend<br/>Next.js]
+    API[API Layer<br/>FastAPI]
+    MDS[Market Data Service]
+    SIM[Market Simulator]
+    NEWS[News Intelligence]
+    RAG[Research Engine]
+    CA[Company Intelligence]
+    PRED[Prediction Engine]
+    FO[F&O Intelligence]
+    REASON[Reasoning Engine]
+    PORT[Portfolio Engine]
+    BACKTEST[Backtesting Engine]
+    RL[RL Engine]
+    PG[(PostgreSQL)]
+    REDIS[(Redis)]
+    QDRANT[(Qdrant)]
 
-        ↓
+    FE --> API
+    API --> MDS
+    API --> SIM
+    API --> NEWS
+    API --> RAG
+    API --> CA
+    API --> PRED
+    API --> FO
+    API --> REASON
+    API --> PORT
+    API --> BACKTEST
+    API --> RL
 
-API Layer (FastAPI)
+    MDS --> PG
+    SIM --> PG
+    NEWS --> PG
+    CA --> PG
+    PORT --> PG
+    API --> REDIS
+    RAG --> QDRANT
+```
 
-        ↓
+## Foundation Flow
 
---------------------------------
-Business Logic Layer
---------------------------------
-
-Market Simulator
-
-News Intelligence
-
-Research Engine
-
-Company Intelligence
-
-Prediction Engine
-
-F&O Intelligence
-
-Reasoning Engine
-
-Portfolio Engine
-
-Backtesting Engine
-
-RL Engine
-
---------------------------------
-
-        ↓
-
-PostgreSQL
-Redis
-Qdrant
+```mermaid
+flowchart LR
+    EXT[External Market APIs] --> MDS[Market Data Service]
+    MDS --> SIM[Market Simulator Engine]
+    SIM --> ENV1[User Environment]
+    SIM --> ENV2[AI Environment]
+    SIM --> ENV3[RL / Backtesting Environment]
+    SIM --> DB[(PostgreSQL)]
 ```
 
 ---
 
-# PHASE 1 — Planning & Architecture
+# PHASE 1 - Planning & Architecture
 
 ## Objectives
 
@@ -147,27 +171,27 @@ Qdrant
 
 ---
 
-# PHASE 2 — Project Setup
+# PHASE 2 - Project Setup
 
 ## Objectives
 
 * Setup repository.
-* Setup frontend.
-* Setup backend.
-* Setup Docker.
+* Setup backend environment.
+* Setup dependency management.
+* Setup documentation.
 * Setup PostgreSQL.
 * Setup CI/CD foundation.
 
 ## Deliverables
 
-* Running frontend.
-* Running backend.
-* Connected database.
-* Docker environment.
+* Running backend environment.
+* Stable dependency setup.
+* Backend setup documentation.
+* Prepared database and infrastructure foundation.
 
 ---
 
-# PHASE 3 — Frontend Foundation
+# PHASE 3 - Frontend Foundation
 
 ## Objectives
 
@@ -191,8 +215,8 @@ Build reusable UI architecture.
 ### Features
 
 * Responsive UI
-* Dark Mode
-* Global Theme System
+* Global theme system
+* Reusable dashboard layout
 
 ## Deliverables
 
@@ -200,7 +224,7 @@ Build reusable UI architecture.
 
 ---
 
-# PHASE 4 — Core Database Layer
+# PHASE 4 - Core Database Layer
 
 ## Tables
 
@@ -248,7 +272,7 @@ Build reusable UI architecture.
 
 ---
 
-# PHASE 5 — Market Simulator
+# PHASE 5 - Market Simulator
 
 ## Objectives
 
@@ -257,11 +281,25 @@ Create paper trading system.
 ### Features
 
 * Virtual money
-* Buy/Sell stocks
+* Buy and sell stocks
 * Holdings
 * Portfolio tracking
 * P&L tracking
 * Watchlist
+
+## Flow
+
+```mermaid
+flowchart TD
+    A[Create Environment] --> B[Add Virtual Cash]
+    B --> C[Buy or Sell Stocks]
+    C --> D[Update Holdings]
+    C --> E[Record Transactions]
+    D --> F[Calculate Portfolio Performance]
+    E --> F
+    M[Market Data Service] --> C
+    M --> F
+```
 
 ## Deliverables
 
@@ -269,7 +307,7 @@ Create paper trading system.
 
 ---
 
-# PHASE 6 — Market Data Pipeline
+# PHASE 6 - Market Data Pipeline
 
 ## Objectives
 
@@ -282,14 +320,14 @@ Collect and maintain:
 
 ## Processing
 
-```text
-Market Data
-↓
-Cleaning
-↓
-Validation
-↓
-Storage
+```mermaid
+flowchart TD
+    A[Market Data Sources] --> B[Ingestion]
+    B --> C[Cleaning]
+    C --> D[Validation]
+    D --> E[Normalization]
+    E --> F[Storage]
+    F --> G[Market Data Service]
 ```
 
 ## Deliverables
@@ -298,7 +336,7 @@ Storage
 
 ---
 
-# PHASE 7 — News Intelligence Pipeline
+# PHASE 7 - News Intelligence Pipeline
 
 ## Objectives
 
@@ -311,14 +349,13 @@ Collect:
 
 ## Processing
 
-```text
-News
-↓
-Deduplication
-↓
-Cleaning
-↓
-Storage
+```mermaid
+flowchart TD
+    A[News Sources] --> B[Collection]
+    B --> C[Deduplication]
+    C --> D[Cleaning]
+    D --> E[Classification]
+    E --> F[Storage]
 ```
 
 ## Deliverables
@@ -327,7 +364,7 @@ Storage
 
 ---
 
-# PHASE 8 — Event Extraction Engine
+# PHASE 8 - Event Extraction Engine
 
 ## Objectives
 
@@ -357,7 +394,7 @@ Example:
 
 ---
 
-# PHASE 9 — Financial Research RAG
+# PHASE 9 - Financial Research RAG
 
 ## Documents
 
@@ -368,14 +405,13 @@ Example:
 
 ## Pipeline
 
-```text
-Documents
-↓
-Chunking
-↓
-Embeddings
-↓
-Qdrant
+```mermaid
+flowchart TD
+    A[Financial Documents] --> B[Parsing]
+    B --> C[Chunking]
+    C --> D[Embeddings]
+    D --> E[Qdrant]
+    E --> F[Searchable Research Context]
 ```
 
 ## Deliverables
@@ -384,7 +420,7 @@ Qdrant
 
 ---
 
-# PHASE 10 — Company Intelligence Engine
+# PHASE 10 - Company Intelligence Engine
 
 ## Analyze
 
@@ -407,7 +443,7 @@ Qdrant
 
 ---
 
-# PHASE 11 — Financial Reasoning Engine
+# PHASE 11 - Financial Reasoning Engine
 
 ## Inputs
 
@@ -430,7 +466,7 @@ with explanations.
 
 ---
 
-# PHASE 12 — Prediction Models
+# PHASE 12 - Prediction Models
 
 ## Baseline Models
 
@@ -452,7 +488,7 @@ with explanations.
 
 ---
 
-# PHASE 13 — Signal Fusion Layer
+# PHASE 13 - Signal Fusion Layer
 
 ## Combine
 
@@ -460,6 +496,7 @@ with explanations.
 * Market Signals
 * Prediction Signals
 * Company Signals
+* Research Signals
 
 ## Generate
 
@@ -467,13 +504,33 @@ with explanations.
 * Hold
 * Sell
 
+## Flow
+
+```mermaid
+flowchart TD
+    A[News Signals]
+    B[Market Signals]
+    C[Prediction Signals]
+    D[Company Signals]
+    E[Research Signals]
+    F[Signal Fusion Layer]
+    G[Buy / Hold / Sell Intelligence]
+
+    A --> F
+    B --> F
+    C --> F
+    D --> F
+    E --> F
+    F --> G
+```
+
 ## Deliverables
 
 * Unified decision engine.
 
 ---
 
-# PHASE 14 — AI Portfolio Manager
+# PHASE 14 - AI Portfolio Manager
 
 ## Objectives
 
@@ -492,7 +549,7 @@ Generate AI-managed portfolios.
 
 ---
 
-# PHASE 15 — Backtesting Engine
+# PHASE 15 - Backtesting Engine
 
 ## Objectives
 
@@ -510,7 +567,7 @@ Replay historical markets.
 
 ---
 
-# PHASE 16 — F&O Intelligence Module
+# PHASE 16 - F&O Intelligence Module
 
 ## Analyze
 
@@ -531,7 +588,7 @@ Replay historical markets.
 
 ---
 
-# PHASE 17 — Advanced Frontend
+# PHASE 17 - Advanced Frontend
 
 ## Pages
 
@@ -574,7 +631,7 @@ Replay historical markets.
 
 ---
 
-# PHASE 18 — Multi-Agent Architecture
+# PHASE 18 - Multi-Agent Architecture
 
 ## Agents
 
@@ -606,13 +663,35 @@ Analyzes derivatives.
 
 Combines all intelligence.
 
+## Flow
+
+```mermaid
+flowchart TD
+    N[News Agent]
+    M[Market Agent]
+    R[Research Agent]
+    C[Company Agent]
+    P[Prediction Agent]
+    F[F&O Agent]
+    S[Reasoning Agent]
+    O[Portfolio Output]
+
+    N --> S
+    M --> S
+    R --> S
+    C --> S
+    P --> S
+    F --> S
+    S --> O
+```
+
 ## Deliverables
 
 * LangGraph workflow.
 
 ---
 
-# PHASE 19 — Reinforcement Learning
+# PHASE 19 - Reinforcement Learning
 
 ## Environment
 
@@ -638,13 +717,25 @@ Market Simulator
 * Risk-adjusted Return
 * Drawdown Penalty
 
+## Flow
+
+```mermaid
+flowchart LR
+    A[Market Simulator Environment] --> B[State]
+    B --> C[RL Agent]
+    C --> D[Action<br/>Buy / Sell / Hold / Rebalance]
+    D --> A
+    A --> E[Reward]
+    E --> C
+```
+
 ## Deliverables
 
 * RL Portfolio Manager.
 
 ---
 
-# PHASE 20 — Evaluation & Analytics
+# PHASE 20 - Evaluation & Analytics
 
 ## Metrics
 
@@ -662,7 +753,7 @@ Market Simulator
 
 ---
 
-# PHASE 21 — Production Deployment
+# PHASE 21 - Production Deployment
 
 ## Features
 
