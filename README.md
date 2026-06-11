@@ -122,6 +122,89 @@ The objective is to generate explainable and evidence-based decisions rather tha
 
 ---
 
+## Project Component Flow
+
+The diagram below shows how Prospera is expected to evolve from the V1 simulator foundation into the larger financial intelligence platform.
+
+```text
+                                      +----------------------+
+                                      |      Frontend        |
+                                      | Next.js / React UI   |
+                                      +----------+-----------+
+                                                 |
+                                                 v
+                                      +----------------------+
+                                      |      API Layer       |
+                                      | FastAPI Endpoints    |
+                                      +----------+-----------+
+                                                 |
+                      +--------------------------+--------------------------+
+                      |                                                     |
+                      v                                                     v
+         +---------------------------+                         +---------------------------+
+         |   Market Simulator V1     |                         |   Market Data Service     |
+         | Core trading foundation   |<------------------------| Shared quote/history hub  |
+         | for isolated environments |                         | for all internal clients  |
+         +-------------+-------------+                         +-------------+-------------+
+                       |                                                             |
+         +-------------+-------------+                                  +------------+------------+
+         |                           |                                  |                         |
+         v                           v                                  v                         v
++-------------------+    +-------------------------+      +-------------------------+  +----------------------+
+| User Environments |    | AI / RL Environments    |      | External Market APIs    |  | Future Cache Layer   |
+| Manual portfolios |    | Agent-controlled sims   |      | Quotes / history data   |  | Redis / fast reads   |
++-------------------+    +-------------------------+      +-------------------------+  +----------------------+
+         |
+         v
++---------------------------+
+| Holdings / Trades / P&L   |
+| Transactions / Performance|
++---------------------------+
+
+
+Future intelligence layers built on top of the same foundation:
+
+                                      +----------------------+
+                                      |   News Intelligence  |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Research RAG Engine  |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Company Analysis     |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Prediction Models    |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Signal Fusion Layer  |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Reasoning / Agents   |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | AI Portfolio Manager |
+                                      +----------+-----------+
+                                                 |
+                                      +----------v-----------+
+                                      | Backtesting / RL     |
+                                      +----------------------+
+```
+
+### Diagram Reading Guide
+
+- `Market Data Service` is the shared internal gateway for prices, history, symbol search, and metadata.
+- `Market Simulator V1` is the first production foundation and supports isolated user, AI, and future RL environments.
+- Future modules should build on top of these shared foundations instead of bypassing them.
+
+---
+
 ## System Roadmap
 
 ### Phase 1
