@@ -10,6 +10,7 @@ Prospera is an agentic financial intelligence platform that combines:
 
 * Market simulation
 * Portfolio management
+* Historical investment simulation
 * News intelligence
 * Financial research
 * Company analysis
@@ -22,6 +23,8 @@ Prospera is an agentic financial intelligence platform that combines:
 The goal is not simply to predict stock prices.
 
 The goal is to build a complete intelligence system capable of understanding financial information, generating investment insights, evaluating opportunities, and continuously learning from market outcomes.
+
+This includes the ability to reconstruct historical portfolios, simulate past investment decisions, and evaluate how different allocation strategies would have performed over time.
 
 ---
 
@@ -109,6 +112,7 @@ flowchart TD
     FO[F&O Intelligence]
     REASON[Reasoning Engine]
     PORT[Portfolio Engine]
+    HISTSIM[Historical Investment Simulation Engine]
     BACKTEST[Backtesting Engine]
     RL[RL Engine]
     PG[(PostgreSQL)]
@@ -125,6 +129,7 @@ flowchart TD
     API --> FO
     API --> REASON
     API --> PORT
+    API --> HISTSIM
     API --> BACKTEST
     API --> RL
 
@@ -133,6 +138,7 @@ flowchart TD
     NEWS --> PG
     CA --> PG
     PORT --> PG
+    HISTSIM --> PG
     API --> REDIS
     RAG --> QDRANT
 ```
@@ -149,6 +155,26 @@ flowchart LR
     SIM --> DB[(PostgreSQL)]
 ```
 
+## Historical Investment Simulation Flow
+
+```mermaid
+flowchart LR
+    HD[Historical Data] --> SE[Simulation Engine]
+    SE --> PC[Portfolio Calculator]
+    PC --> PA[Performance Analyzer]
+    PA --> R[Results]
+```
+
+The Historical Investment Simulation Engine should be built as a reusable internal service that supports both user-facing analysis and future AI-driven optimization workflows.
+
+This capability will later become a foundational component for:
+
+* Portfolio Intelligence
+* Backtesting
+* AI Portfolio Management
+* Reinforcement Learning
+* Strategy Optimization
+
 ---
 
 # PHASE 1 - Planning & Architecture
@@ -161,6 +187,7 @@ flowchart LR
 * Define API contracts.
 * Create folder structure.
 * Define agent communication format.
+* Define reusable internal service contracts for historical portfolio simulation and performance analysis.
 
 ## Deliverables
 
@@ -168,6 +195,7 @@ flowchart LR
 * ER diagrams.
 * API specifications.
 * Development roadmap.
+* Historical simulation service boundaries for portfolio and backtesting workflows.
 
 ---
 
@@ -286,6 +314,7 @@ Create paper trading system.
 * Portfolio tracking
 * P&L tracking
 * Watchlist
+* Future compatibility with reusable historical simulation services
 
 ## Flow
 
@@ -315,6 +344,7 @@ Collect and maintain:
 
 * Historical stock prices
 * Index data
+* Mutual fund NAV data
 * Company information
 * Sector information
 
@@ -542,6 +572,22 @@ Generate AI-managed portfolios.
 * Risk Analysis
 * Portfolio Health
 * Rebalancing Suggestions
+* Historical scenario comparison
+* Allocation optimization using simulation feedback
+
+## Historical Investment Simulation Integration
+
+Future AI systems should be able to:
+
+1. Create a portfolio.
+2. Run a historical simulation.
+3. Observe performance metrics.
+4. Modify allocations.
+5. Re-run simulations.
+6. Compare results.
+7. Select better-performing strategies.
+
+The Historical Investment Simulation Engine should support repeated simulation cycles so portfolio agents can iteratively improve allocations and evaluate tradeoffs before recommending strategies.
 
 ## Deliverables
 
@@ -558,12 +604,61 @@ Replay historical markets.
 ### Features
 
 * Historical simulation
+* Lump Sum investment simulations
+* SIP (Systematic Investment Plan) simulations
+* Multi-asset portfolio simulations
+* Historical portfolio reconstruction
+* Portfolio performance analysis
 * Strategy testing
 * Benchmark comparison
+
+### Example Use Cases
+
+* If I invested Rs.100,000 in NVIDIA 5 years ago, what would it be worth today?
+* If I invested Rs.5,000 monthly into a mutual fund for 10 years, what would the current value be?
+* What would happen if I allocated 50% to Nifty, 30% to NVIDIA, and 20% to Apple?
+
+## Internal Service Design
+
+The Historical Investment Simulation Engine should be implemented as a reusable internal service shared across portfolio intelligence, backtesting, and future AI portfolio workflows.
+
+### Core Responsibilities
+
+* Construct portfolios from user-defined or agent-generated allocations
+* Replay historical investment decisions across one or more assets
+* Support lump sum and SIP cash flow modeling
+* Reconstruct historical holdings and portfolio states
+* Evaluate rebalancing impact and allocation drift
+* Produce reusable performance and risk analytics outputs
+
+### Metrics
+
+#### Return Metrics
+
+* Total Return
+* CAGR
+* XIRR
+* Annualized Return
+
+#### Risk Metrics
+
+* Volatility
+* Sharpe Ratio
+* Sortino Ratio
+* Maximum Drawdown
+
+#### Portfolio Metrics
+
+* Allocation Breakdown
+* Sector Exposure
+* Rebalancing Impact
+* Portfolio Drift
 
 ## Deliverables
 
 * Backtesting framework.
+* Reusable historical investment simulation service.
+* Portfolio performance analytics layer.
 
 ---
 
@@ -697,6 +792,8 @@ flowchart TD
 
 Market Simulator
 
+The Historical Investment Simulation Engine should later serve as a training and evaluation component for repeated simulation cycles, policy testing, and strategy optimization workflows.
+
 ## State
 
 * Portfolio
@@ -746,6 +843,12 @@ flowchart LR
 * Sharpe Ratio
 * Max Drawdown
 * CAGR
+* XIRR
+* Volatility
+* Sortino Ratio
+* Rebalancing Impact
+* Portfolio Drift
+* Sector Exposure
 
 ## Deliverables
 
@@ -784,6 +887,7 @@ Prospera should ultimately provide:
 * Intelligent market research
 * Explainable investment decisions
 * Portfolio simulation
+* Historical investment simulation
 * AI-assisted investing
 * Historical strategy evaluation
 * Multi-agent financial intelligence
