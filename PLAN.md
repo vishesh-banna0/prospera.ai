@@ -1,4 +1,4 @@
-# Prospera - Master Development Plan
+# Prospera - Development Plan
 
 > Transforming information into intelligent decisions that create long-term prosperity.
 
