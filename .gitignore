@@ -81,3 +81,6 @@ docker-compose.override.yml
 # Miscellaneous temporary files
 tmp/
 temp/
+
+# Local scratch files
+main/backend/test.py
