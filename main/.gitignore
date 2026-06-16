@@ -83,4 +83,4 @@ tmp/
 temp/
 
 # Local scratch files
-main/backend/tests/
+main/backend/test.py
