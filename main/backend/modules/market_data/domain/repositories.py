@@ -1,3 +1,61 @@
+from __future__ import annotations
+
+from abc import ABC
+from abc import abstractmethod
+
+from backend.modules.market_data.domain.entities import (
+    HistoricalPriceBar,
+    Instrument,
+    MarketMetadata,
+    MarketQuote,
+)
+from backend.shared.types import Symbol
+
+
+class QuoteRepository(ABC):
+
+    @abstractmethod
+    async def get_quote(
+        self,
+        symbol: Symbol,
+    ) -> MarketQuote:
+        raise NotImplementedError
+
+
+class HistoricalPriceRepository(ABC):
+
+    @abstractmethod
+    async def get_price_history(
+        self,
+        symbol: Symbol,
+    ) -> list[HistoricalPriceBar]:
+        raise NotImplementedError
+
+
+class SymbolSearchRepository(ABC):
+
+    @abstractmethod
+    async def search(
+        self,
+        query: str,
+    ) -> list[Instrument]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_instrument(
+        self,
+        symbol: Symbol,
+    ) -> Instrument | None:
+        raise NotImplementedError
+
+
+class MarketMetadataRepository(ABC):
+
+    @abstractmethod
+    async def get_metadata(
+        self,
+    ) -> MarketMetadata:
+        raise NotImplementedError
 # Purpose:
 # Declares contracts required to retrieve and optionally cache market data.
 #
