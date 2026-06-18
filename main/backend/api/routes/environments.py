@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.dependencies import get_simulator_service
@@ -21,7 +22,7 @@ async def create_environment(
     """Create a new simulator environment."""
     try:
         await service.create_environment(request)
-        return {"status": "created", "environment_id": request.environment_id}
+        return {"status": "created", "message": "Environment created successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -34,7 +35,7 @@ async def rename_environment(
 ) -> dict:
     """Rename a simulator environment."""
     try:
-        request.environment_id = environment_id
+        request = replace(request, environment_id=environment_id)
         await service.rename_environment(request)
         return {"status": "renamed", "environment_id": environment_id}
     except Exception as e:

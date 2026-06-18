@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from dataclasses import replace
 
 from backend.api.dependencies import get_simulator_service
 from backend.modules.simulator.application.dto import (
@@ -23,7 +24,7 @@ async def add_virtual_cash(
 ) -> dict:
     """Deposit virtual cash into environment."""
     try:
-        request.environment_id = environment_id
+        request = replace(request, environment_id=environment_id)
         await service.add_virtual_cash(request)
         return {"status": "deposited", "amount": str(request.amount)}
     except Exception as e:
@@ -38,7 +39,7 @@ async def withdraw_virtual_cash(
 ) -> dict:
     """Withdraw virtual cash from environment."""
     try:
-        request.environment_id = environment_id
+        request = replace(request, environment_id=environment_id)
         await service.withdraw_virtual_cash(request)
         return {"status": "withdrawn", "amount": str(request.amount)}
     except Exception as e:
@@ -53,7 +54,7 @@ async def buy_stock(
 ) -> dict:
     """Buy stock in environment."""
     try:
-        request.environment_id = environment_id
+        request = replace(request, environment_id=environment_id)
         await service.buy_stock(request)
         return {"status": "order_placed", "symbol": request.symbol, "quantity": request.quantity}
     except Exception as e:
@@ -68,7 +69,7 @@ async def sell_stock(
 ) -> dict:
     """Sell stock in environment."""
     try:
-        request.environment_id = environment_id
+        request = replace(request, environment_id=environment_id)
         await service.sell_stock(request)
         return {"status": "order_placed", "symbol": request.symbol, "quantity": request.quantity}
     except Exception as e:

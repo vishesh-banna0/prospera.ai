@@ -3,9 +3,9 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
-from backend.modules.simulator.domain.entities import Environment
 from backend.modules.simulator.domain.entities import Holding
 from backend.modules.simulator.domain.entities import PortfolioSnapshot
+from backend.modules.simulator.domain.entities import SimulatorEnvironment
 from backend.modules.simulator.domain.entities import Transaction
 from backend.shared.types import EnvironmentId
 from backend.shared.types import HoldingId
@@ -21,13 +21,13 @@ class EnvironmentRepository(ABC):
     async def get(
         self,
         environment_id: EnvironmentId,
-    ) -> Environment | None:
+    ) -> SimulatorEnvironment | None:
         raise NotImplementedError
 
     @abstractmethod
     async def save(
         self,
-        environment: Environment,
+        environment: SimulatorEnvironment,
     ) -> None:
         raise NotImplementedError
 
@@ -117,6 +117,8 @@ class PortfolioSnapshotRepository(ABC):
         snapshot: PortfolioSnapshot,
     ) -> None:
         raise NotImplementedError
+
+
 # Purpose:
 # Declares persistence contracts required by the simulator domain and application layers.
 #

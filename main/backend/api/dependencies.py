@@ -2,92 +2,79 @@ from __future__ import annotations
 
 from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from backend.core.config import get_settings
+
 from backend.modules.simulator.application.services import SimulatorService
+
+from backend.modules.simulator.application.commands import (
+    CreateEnvironmentUseCase,
+    RenameEnvironmentUseCase,
+    DeleteEnvironmentUseCase,
+    AddVirtualCashUseCase,
+    WithdrawVirtualCashUseCase,
+    BuyStockUseCase,
+    SellStockUseCase,
+)
+
+from backend.modules.simulator.application.queries import (
+    GetHoldingsUseCase,
+    GetTransactionsUseCase,
+    GetPortfolioPerformanceUseCase,
+)
+
 from backend.modules.simulator.infrastructure.repositories import (
     SqlEnvironmentRepository,
     SqlHoldingRepository,
     SqlTransactionRepository,
     SqlPortfolioSnapshotRepository,
 )
-from backend.modules.market_data.application.services import MarketDataService
-from backend.modules.market_data.infrastructure.repositories import (
-    QuoteRepository,
-    HistoricalPriceRepository,
-    SymbolSearchRepository,
-    MarketMetadataRepository,
-)
 
-# Initialize database session factory
+from backend.modules.market_data.application.services import MarketDataService
+
+
 _engine = None
 _async_session_maker = None
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Provide database session for request."""
-    global _engine, _async_session_maker
-    
+    """
+    Provide request-scoped database session.
+    """
+    global _engine
+    global _async_session_maker
+
     if _async_session_maker is None:
         settings = get_settings()
+
         _engine = create_async_engine(
             settings.database_url,
             echo=settings.app_debug,
         )
+
         _async_session_maker = async_sessionmaker(
             _engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
-    
+
     async with _async_session_maker() as session:
         yield session
 
 
-async def get_simulator_service(
-    session: AsyncSession = None,
-) -> SimulatorService:
-    """Provide simulator application service."""
-    if session is None:
-        settings = get_settings()
-        engine = create_async_engine(settings.database_url)
-        async_session_maker = async_sessionmaker(
-            engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        async with async_session_maker() as session:
-            pass
-    
-    # Instantiate repositories
-    environment_repo = SqlEnvironmentRepository(session)
-    holding_repo = SqlHoldingRepository(session)
-    transaction_repo = SqlTransactionRepository(session)
-    snapshot_repo = SqlPortfolioSnapshotRepository(session)
-    
-    # TODO: Instantiate use cases from application layer
-    # For now, return service stub
-    return SimulatorService(
-        create_environment=None,
-        rename_environment=None,
-        delete_environment=None,
-        add_virtual_cash=None,
-        withdraw_virtual_cash=None,
-        buy_stock=None,
-        sell_stock=None,
-        get_holdings=None,
-        get_transactions=None,
-        get_portfolio_performance=None,
-    )
-
-
 async def get_market_data_service(
-    session: AsyncSession = None,
+    session: AsyncSession = Depends(get_db_session),
 ) -> MarketDataService:
-    """Provide market data application service."""
-    # TODO: Instantiate repositories from infrastructure layer
-    # For now, return service stub
+    """
+    Provide market data service.
+    """
+
     return MarketDataService(
         quote_repository=None,
         historical_price_repository=None,
@@ -96,29 +83,79 @@ async def get_market_data_service(
     )
 
 
-"""
-Purpose:
-Describe dependency wiring between API layer and application services.
+async def get_simulator_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> SimulatorService:
+    """
+    Provide simulator service.
+    """
 
-Responsibilities:
-- Provide simulator application services to route handlers
-- Provide market data application services to route handlers
-- Centralize request-scoped dependency construction
-- Manage database session lifecycle
+    environment_repo = SqlEnvironmentRepository(session)
+    holding_repo = SqlHoldingRepository(session)
+    transaction_repo = SqlTransactionRepository(session)
+    snapshot_repo = SqlPortfolioSnapshotRepository(session)
 
-Dependencies:
-- backend.modules.simulator.application.services
-- backend.modules.market_data.application.services
-- SQLAlchemy async engine and sessions
-- backend.core.config for settings
+    market_data_service = await get_market_data_service(session)
 
-Functions:
-- get_db_session: Async generator for database sessions
-- get_simulator_service: Provides SimulatorService instance
-- get_market_data_service: Provides MarketDataService instance
+    create_environment = CreateEnvironmentUseCase(
+        environment_repository=environment_repo,
+    )
 
-What Should Not Live Here:
-- Hard-coded database sessions
-- Direct environment mutations
-- Provider-specific API request logic
-"""
+    rename_environment = RenameEnvironmentUseCase(
+        environment_repository=environment_repo,
+    )
+
+    delete_environment = DeleteEnvironmentUseCase(
+        environment_repository=environment_repo,
+    )
+
+    add_virtual_cash = AddVirtualCashUseCase(
+        environment_repository=environment_repo,
+        transaction_repository=transaction_repo,
+    )
+
+    withdraw_virtual_cash = WithdrawVirtualCashUseCase(
+        environment_repository=environment_repo,
+        transaction_repository=transaction_repo,
+    )
+
+    buy_stock = BuyStockUseCase(
+        environment_repository=environment_repo,
+        holding_repository=holding_repo,
+        transaction_repository=transaction_repo,
+        market_data_service=market_data_service,
+    )
+
+    sell_stock = SellStockUseCase(
+        environment_repository=environment_repo,
+        holding_repository=holding_repo,
+        transaction_repository=transaction_repo,
+        market_data_service=market_data_service,
+    )
+
+    get_holdings = GetHoldingsUseCase(
+        holding_repository=holding_repo,
+    )
+
+    get_transactions = GetTransactionsUseCase(
+        transaction_repository=transaction_repo,
+    )
+
+    get_portfolio_performance = GetPortfolioPerformanceUseCase(
+        environment_repository=environment_repo,
+        holding_repository=holding_repo,
+        market_data_service=market_data_service,
+    )
+
+    return SimulatorService(
+        create_environment=create_environment,
+        rename_environment=rename_environment,
+        delete_environment=delete_environment,
+        add_virtual_cash=add_virtual_cash,
+        withdraw_virtual_cash=withdraw_virtual_cash,
+        buy_stock=buy_stock,
+        sell_stock=sell_stock,
+        get_holdings=get_holdings,
+        get_transactions=get_transactions,
+        get_portfolio_performance=get_portfolio_performance,
+    )

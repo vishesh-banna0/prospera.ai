@@ -17,6 +17,8 @@ from typing import NewType
 EnvironmentId = NewType("EnvironmentId", str)
 TransactionId = NewType("TransactionId", str)
 HoldingId = NewType("HoldingId", str)
+PortfolioSnapshotId = NewType("PortfolioSnapshotId", str)
+
 Symbol = NewType("Symbol", str)
 CurrencyCode = NewType("CurrencyCode", str)
 Timestamp = datetime

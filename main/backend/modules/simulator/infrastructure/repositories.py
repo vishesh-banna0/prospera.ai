@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from backend.modules.simulator.domain.entities import (
-    Environment,
+    SimulatorEnvironment,
     Holding,
     PortfolioSnapshot,
     Transaction,
@@ -38,7 +38,7 @@ class SqlEnvironmentRepository(EnvironmentRepository):
     async def get(
         self,
         environment_id: EnvironmentId,
-    ) -> Environment | None:
+    ) -> SimulatorEnvironment | None:
         stmt = select(EnvironmentModel).where(
             EnvironmentModel.environment_id == environment_id
         )
@@ -52,7 +52,7 @@ class SqlEnvironmentRepository(EnvironmentRepository):
 
     async def save(
         self,
-        environment: Environment,
+        environment: SimulatorEnvironment,
     ) -> None:
         model = EnvironmentModel(
             environment_id=environment.environment_id,
@@ -79,8 +79,8 @@ class SqlEnvironmentRepository(EnvironmentRepository):
             await self._session.flush()
 
     @staticmethod
-    def _model_to_entity(model: EnvironmentModel) -> Environment:
-        return Environment(
+    def _model_to_entity(model: EnvironmentModel) -> SimulatorEnvironment:
+        return SimulatorEnvironment(
             environment_id=model.environment_id,
             owner_type=model.owner_type,
             name=model.name,
