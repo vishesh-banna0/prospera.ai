@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from backend.core.exceptions import ConfigurationError
 from backend.core.config import get_settings
 
 from backend.modules.simulator.application.services import SimulatorService
@@ -37,6 +38,13 @@ from backend.modules.simulator.infrastructure.repositories import (
 )
 
 from backend.modules.market_data.application.services import MarketDataService
+from backend.modules.market_data.infrastructure.clients import FinnhubClient
+from backend.modules.market_data.infrastructure.repositories import (
+    FinnhubMarketMetadataRepository,
+    FinnhubQuoteRepository,
+    FinnhubSymbolSearchRepository,
+    InMemoryHistoricalPriceRepository,
+)
 
 
 _engine = None
@@ -74,12 +82,21 @@ async def get_market_data_service(
     """
     Provide market data service.
     """
+    settings = get_settings()
+
+    provider_name = settings.market_data_provider.strip().lower()
+    if provider_name != "finnhub":
+        raise ConfigurationError(
+            "MARKET_DATA_PROVIDER must be set to 'finnhub' for the current backend integration."
+        )
+
+    client = FinnhubClient(settings=settings)
 
     return MarketDataService(
-        quote_repository=None,
-        historical_price_repository=None,
-        symbol_search_repository=None,
-        market_metadata_repository=None,
+        quote_repository=FinnhubQuoteRepository(client),
+        historical_price_repository=InMemoryHistoricalPriceRepository(),
+        symbol_search_repository=FinnhubSymbolSearchRepository(client),
+        market_metadata_repository=FinnhubMarketMetadataRepository(client),
     )
 
 
