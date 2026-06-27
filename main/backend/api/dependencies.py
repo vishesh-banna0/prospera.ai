@@ -40,10 +40,12 @@ from backend.modules.simulator.infrastructure.repositories import (
 from backend.modules.market_data.application.services import MarketDataService
 from backend.modules.market_data.infrastructure.clients import FinnhubClient
 from backend.modules.market_data.infrastructure.repositories import (
+    CompositeSymbolSearchRepository,
     FinnhubMarketMetadataRepository,
     FinnhubQuoteRepository,
     FinnhubSymbolSearchRepository,
-    InMemoryHistoricalPriceRepository,
+    SqlMarketDataRepository,
+    YFinanceHistoricalDataProvider,
 )
 
 
@@ -91,12 +93,21 @@ async def get_market_data_service(
         )
 
     client = FinnhubClient(settings=settings)
+    market_data_repository = SqlMarketDataRepository(session)
+    yfinance_provider = YFinanceHistoricalDataProvider()
 
     return MarketDataService(
         quote_repository=FinnhubQuoteRepository(client),
-        historical_price_repository=InMemoryHistoricalPriceRepository(),
-        symbol_search_repository=FinnhubSymbolSearchRepository(client),
+        historical_price_repository=market_data_repository,
+        symbol_search_repository=CompositeSymbolSearchRepository(
+            storage_repository=market_data_repository,
+            provider_repository=FinnhubSymbolSearchRepository(client),
+        ),
         market_metadata_repository=FinnhubMarketMetadataRepository(client),
+        historical_price_provider=yfinance_provider,
+        company_profile_repository=market_data_repository,
+        company_profile_provider=yfinance_provider,
+        commit=session.commit,
     )
 
 

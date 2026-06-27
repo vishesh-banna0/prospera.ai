@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
+from backend.modules.market_data.domain.entities import CompanyProfile
 from backend.modules.market_data.domain.entities import (
     HistoricalPriceBar,
     Instrument,
@@ -58,6 +59,19 @@ class SymbolSearchProviderContract(ABC):
         self,
         symbol: Symbol,
     ) -> Instrument | None:
+        raise NotImplementedError
+
+
+class CompanyProfileProviderContract(ABC):
+    """
+    Contract for retrieving company metadata from external providers.
+    """
+
+    @abstractmethod
+    async def get_company_profile(
+        self,
+        symbol: Symbol,
+    ) -> CompanyProfile | None:
         raise NotImplementedError
 
 

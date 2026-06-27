@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from abc import ABC
 from abc import abstractmethod
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -207,6 +209,61 @@ class FinnhubClient(ExternalMarketApiClient):
             raise MarketDataProviderError(str(payload["error"]))
 
         return payload
+
+
+class YFinanceClient:
+    """
+    Minimal yfinance wrapper for free historical market data.
+
+    yfinance is synchronous, so this adapter runs provider calls in a worker
+    thread and keeps the rest of the market data service async.
+    """
+
+    provider_name = "yfinance"
+
+    async def get_price_history(
+        self,
+        symbol: str,
+        start_at: Any,
+        end_at: Any,
+    ) -> Any:
+        def load_history() -> Any:
+            import yfinance as yf
+
+            ticker = yf.Ticker(symbol)
+            return ticker.history(
+                start=start_at.date().isoformat(),
+                end=(end_at.date() + timedelta(days=1)).isoformat(),
+                interval="1d",
+                auto_adjust=False,
+                actions=True,
+            )
+
+        try:
+            return await asyncio.to_thread(load_history)
+        except Exception as exc:
+            raise MarketDataUnavailableError(
+                f"Unable to retrieve yfinance history for {symbol}: {exc}"
+            ) from exc
+
+    async def get_info(
+        self,
+        symbol: str,
+    ) -> dict[str, Any]:
+        def load_info() -> dict[str, Any]:
+            import yfinance as yf
+
+            raw_info = yf.Ticker(symbol).get_info()
+            if not isinstance(raw_info, dict):
+                return {}
+            return raw_info
+
+        try:
+            return await asyncio.to_thread(load_info)
+        except Exception as exc:
+            raise MarketDataUnavailableError(
+                f"Unable to retrieve yfinance profile for {symbol}: {exc}"
+            ) from exc
 # Purpose:
 # Placeholder module for external market API clients and adapters.
 #

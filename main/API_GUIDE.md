@@ -27,10 +27,10 @@ APP_PORT=8000
 # Database Configuration
 DATABASE_URL=sqlite+aiosqlite:///./prospera.db
 
-# Market Data Configuration (Optional)
-MARKET_DATA_PROVIDER=mock
-MARKET_DATA_API_KEY=your_api_key_here
-MARKET_DATA_BASE_URL=https://api.example.com
+# Market Data Configuration
+MARKET_DATA_PROVIDER=finnhub
+MARKET_DATA_API_KEY=your_finnhub_api_key_here
+MARKET_DATA_BASE_URL=https://finnhub.io/api/v1
 ```
 
 ### 3. Initialize Database
@@ -244,6 +244,8 @@ Response:
 
 ### Market Data
 
+Prospera uses the market data service as the only internal gateway for external market providers. Finnhub powers live quote, search, and market metadata flows. yfinance powers free historical price and company-profile ingestion. Future simulator, backtesting, AI, analytics, and RL consumers should use these endpoints or the application service rather than calling providers directly.
+
 #### Get Market Quote
 
 ```bash
@@ -264,6 +266,62 @@ Response:
 }
 ```
 
+#### Get Historical Prices
+
+```bash
+GET /api/v1/market-data/history/AAPL?start_at=2024-01-01T00:00:00Z&end_at=2024-12-31T00:00:00Z&auto_sync=true
+```
+
+Response:
+```json
+{
+  "symbol": "AAPL",
+  "currency": "USD",
+  "prices": [
+    {
+      "timestamp": "2024-01-02T00:00:00Z",
+      "open_price": "187.15",
+      "high_price": "188.44",
+      "low_price": "183.89",
+      "close_price": "185.64",
+      "volume": 82488700,
+      "adjusted_close_price": "184.73",
+      "split_coefficient": null,
+      "dividend_amount": null
+    }
+  ]
+}
+```
+
+#### Sync Historical Prices
+
+```bash
+POST /api/v1/market-data/history/sync
+Content-Type: application/json
+
+{
+  "symbol": "AAPL",
+  "start_at": "2024-01-01T00:00:00Z",
+  "end_at": "2024-12-31T00:00:00Z",
+  "asset_type": "stock"
+}
+```
+
+Response:
+```json
+{
+  "symbol": "AAPL",
+  "requested_start_at": "2024-01-01T00:00:00Z",
+  "requested_end_at": "2024-12-31T00:00:00Z",
+  "fetched_count": 252,
+  "stored_count": 252,
+  "skipped": false,
+  "message": null
+}
+```
+
+Historical synchronization is incremental. If `historical_price_bars` already contains data through the requested end date, the sync is skipped. Otherwise, the service fetches from the day after the latest stored bar and upserts rows by `(symbol, price_date)`.
+
 #### Search Symbols
 
 ```bash
@@ -272,6 +330,30 @@ Content-Type: application/json
 
 {
   "query": "apple"
+}
+```
+
+#### Get Company Profile
+
+```bash
+GET /api/v1/market-data/profile/AAPL
+```
+
+Response:
+```json
+{
+  "symbol": "AAPL",
+  "instrument_name": "Apple Inc.",
+  "currency": "USD",
+  "exchange": "NasdaqGS",
+  "asset_type": "stock",
+  "sector": "Technology",
+  "industry": "Consumer Electronics",
+  "country": "United States",
+  "website": "https://www.apple.com",
+  "description": "...",
+  "market_cap": "2850000000000",
+  "employees": 164000
 }
 ```
 
@@ -367,6 +449,16 @@ Infrastructure Layer (Repositories, database)
 - **Policies**: Business logic functions (can_buy, calculate_cost_basis, etc.)
 - **DTOs**: Data transfer objects for API contracts
 
+### Market Data Pipeline
+
+The Phase 6 pipeline stores provider-independent data in PostgreSQL:
+
+- `market_instruments`: normalized symbol metadata, asset type, exchange, currency, sector, industry, and country.
+- `historical_price_bars`: daily OHLCV bars, adjusted close, dividends, split coefficients, source, and unique `(symbol, price_date)`.
+- `company_profiles`: normalized company metadata for company analysis and future intelligence modules.
+
+Provider adapters must implement contracts from `backend/modules/market_data/application/providers.py` and return domain entities from `backend/modules/market_data/domain/entities.py`. The application service handles validation, incremental append behavior, deduplication through repository upserts, and API-facing response mapping.
+
 ## Configuration
 
 ### Environment Variables
@@ -379,9 +471,9 @@ Infrastructure Layer (Repositories, database)
 | `APP_HOST` | 127.0.0.1 | Server host |
 | `APP_PORT` | 8000 | Server port |
 | `DATABASE_URL` | sqlite:///./prospera.db | Database connection string |
-| `MARKET_DATA_PROVIDER` | mock | Market data provider (mock, alpha_vantage, etc.) |
-| `MARKET_DATA_API_KEY` | - | API key for market data provider |
-| `MARKET_DATA_BASE_URL` | - | Base URL for market data API |
+| `MARKET_DATA_PROVIDER` | finnhub | Live quote/search/status provider |
+| `MARKET_DATA_API_KEY` | - | Finnhub API key |
+| `MARKET_DATA_BASE_URL` | https://finnhub.io/api/v1 | Finnhub API base URL |
 
 ## Troubleshooting
 
@@ -483,7 +575,7 @@ _engine = create_async_engine(
 
 ## Next Steps
 
-- Implement real market data providers
+- Add scheduled market data sync jobs
 - Add authentication and authorization
 - Create frontend UI for portfolio management
 - Add WebSocket support for real-time updates

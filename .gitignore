@@ -58,9 +58,6 @@ logs/
 node_modules/
 .next/
 out/
-.turbo/
-coverage/
-*.tsbuildinfo
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -83,4 +80,3 @@ tmp/
 temp/
 
 # Local scratch files
-main/backend/tests/

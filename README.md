@@ -16,6 +16,7 @@ V1 includes:
 - A market simulator engine
 - Isolated portfolio environments
 - A centralized market data service
+- A Phase 6 market data pipeline for normalized historical prices, index data, company metadata, sectors, and industries
 - Clean backend architecture for future expansion
 
 V1 does not yet include:
@@ -228,6 +229,35 @@ Quote retrieval, historical prices, symbol lookup, metadata, provider abstractio
 
 Should not contain:
 Portfolio rules or simulator state management.
+
+## Phase 6 Market Data Pipeline
+
+The market data module is now the single source of truth for historical market datasets used by the simulator, future backtesting, prediction models, portfolio analytics, company analysis, and RL environments.
+
+Supported datasets:
+- Historical stock prices as daily OHLCV bars
+- Historical index data through the same daily bar pipeline
+- Company information and metadata
+- Sector and industry metadata
+
+Provider strategy:
+- Finnhub remains the live quote, symbol lookup, and market-status provider.
+- yfinance is used for free historical price and company profile ingestion.
+- Downstream modules consume `MarketDataService` only and do not call external providers directly.
+
+Storage:
+- `market_instruments`: provider-independent symbol, exchange, currency, asset type, sector, industry, country, and status metadata.
+- `historical_price_bars`: daily OHLCV, adjusted close, split coefficient, dividends, and source metadata. The `(symbol, price_date)` uniqueness constraint prevents duplicate bars.
+- `company_profiles`: normalized company metadata, including sector and industry fields.
+
+Synchronization:
+- Historical sync validates the requested window, normalizes symbols, resolves company metadata, stores the instrument/profile, fetches only missing dates after the latest stored bar, validates/cleans provider rows, and upserts records.
+- `GET /api/v1/market-data/history/{symbol}` reads normalized history and can auto-sync missing data.
+- `POST /api/v1/market-data/history/sync` explicitly appends historical data.
+- `GET /api/v1/market-data/profile/{symbol}` serves normalized company metadata.
+
+Future provider integration:
+Implement the provider contracts in `backend/modules/market_data/application/providers.py`, return domain entities from the adapter, and wire the provider in `backend/api/dependencies.py`. Business logic and downstream consumers should not change. Mutual fund NAV support is prepared with a provider-independent `MutualFundNavRecord` shape, but full NAV ingestion is intentionally left for a later phase.
 
 ### `backend/shared`
 

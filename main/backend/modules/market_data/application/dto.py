@@ -22,6 +22,15 @@ class HistoricalPriceRequest:
     symbol: Symbol
     start_at: Timestamp
     end_at: Timestamp
+    auto_sync: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class SyncHistoricalPricesRequest:
+    symbol: Symbol
+    start_at: Timestamp
+    end_at: Timestamp
+    asset_type: str = "stock"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +70,9 @@ class HistoricalPricePointView:
     close_price: str
 
     volume: int
+    adjusted_close_price: str | None = None
+    split_coefficient: str | None = None
+    dividend_amount: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,11 +83,25 @@ class HistoricalPriceSeriesView:
 
 
 @dataclass(frozen=True, slots=True)
+class SyncHistoricalPricesView:
+    symbol: Symbol
+    requested_start_at: Timestamp
+    requested_end_at: Timestamp
+    fetched_count: int
+    stored_count: int
+    skipped: bool = False
+    message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class InstrumentSearchResultView:
     symbol: Symbol
     instrument_name: str
     exchange: str
     currency: CurrencyCode
+    asset_type: str = "stock"
+    sector: str | None = None
+    industry: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +117,22 @@ class MarketMetadataView:
     timezone: str | None = None
     market_status: str | None = None
     last_updated_at: Timestamp | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyProfileView:
+    symbol: Symbol
+    instrument_name: str
+    currency: CurrencyCode
+    exchange: str
+    asset_type: str
+    sector: str | None = None
+    industry: str | None = None
+    country: str | None = None
+    website: str | None = None
+    description: str | None = None
+    market_cap: str | None = None
+    employees: int | None = None
 # Purpose:
 # Defines input and output contracts for market data use cases.
 #

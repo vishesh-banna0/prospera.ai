@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from abc import abstractmethod
 
+from backend.modules.market_data.domain.entities import CompanyProfile
 from backend.modules.market_data.domain.entities import (
     HistoricalPriceBar,
     Instrument,
@@ -10,6 +11,7 @@ from backend.modules.market_data.domain.entities import (
     MarketQuote,
 )
 from backend.shared.types import Symbol
+from backend.shared.types import Timestamp
 
 
 class QuoteRepository(ABC):
@@ -28,7 +30,23 @@ class HistoricalPriceRepository(ABC):
     async def get_price_history(
         self,
         symbol: Symbol,
+        start_at: Timestamp | None = None,
+        end_at: Timestamp | None = None,
     ) -> list[HistoricalPriceBar]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_latest_price_timestamp(
+        self,
+        symbol: Symbol,
+    ) -> Timestamp | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_price_history(
+        self,
+        bars: list[HistoricalPriceBar],
+    ) -> int:
         raise NotImplementedError
 
 
@@ -46,6 +64,30 @@ class SymbolSearchRepository(ABC):
         self,
         symbol: Symbol,
     ) -> Instrument | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_instrument(
+        self,
+        instrument: Instrument,
+    ) -> None:
+        raise NotImplementedError
+
+
+class CompanyProfileRepository(ABC):
+
+    @abstractmethod
+    async def get_company_profile(
+        self,
+        symbol: Symbol,
+    ) -> CompanyProfile | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def upsert_company_profile(
+        self,
+        profile: CompanyProfile,
+    ) -> None:
         raise NotImplementedError
 
 

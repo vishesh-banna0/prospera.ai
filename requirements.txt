@@ -15,6 +15,7 @@ redis==6.2.0
 
 # HTTP clients for external market data integrations
 httpx==0.28.1
+yfinance==0.2.65
 
 # Utilities that are commonly needed in backend services
 python-dateutil==2.9.0.post0

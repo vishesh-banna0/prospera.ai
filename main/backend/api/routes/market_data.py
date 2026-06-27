@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.dependencies import get_market_data_service
 from backend.modules.market_data.application.dto import (
-    QuoteRequest,
-    QuoteView,
-    SymbolSearchRequest,
+    CompanyProfileView,
+    HistoricalPriceRequest,
+    HistoricalPriceSeriesView,
     InstrumentSearchResultsView,
     MarketMetadataView,
+    QuoteRequest,
+    QuoteView,
+    SyncHistoricalPricesRequest,
+    SyncHistoricalPricesView,
+    SymbolSearchRequest,
 )
 from backend.modules.market_data.application.services import MarketDataService
 
@@ -29,6 +36,39 @@ async def get_quote(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/history/{symbol}", response_model=HistoricalPriceSeriesView)
+async def get_historical_prices(
+    symbol: str,
+    start_at: datetime,
+    end_at: datetime,
+    auto_sync: bool = True,
+    service: MarketDataService = Depends(get_market_data_service),
+) -> HistoricalPriceSeriesView:
+    """Get normalized daily historical prices for a symbol."""
+    try:
+        request = HistoricalPriceRequest(
+            symbol=symbol,
+            start_at=start_at,
+            end_at=end_at,
+            auto_sync=auto_sync,
+        )
+        return await service.get_historical_prices(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/history/sync", response_model=SyncHistoricalPricesView)
+async def sync_historical_prices(
+    request: SyncHistoricalPricesRequest,
+    service: MarketDataService = Depends(get_market_data_service),
+) -> SyncHistoricalPricesView:
+    """Synchronize historical prices into the internal market data warehouse."""
+    try:
+        return await service.sync_historical_prices(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/search", response_model=InstrumentSearchResultsView)
 async def search_symbols(
     request: SymbolSearchRequest,
@@ -38,6 +78,18 @@ async def search_symbols(
     try:
         results = await service.search_symbols(request)
         return results
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/profile/{symbol}", response_model=CompanyProfileView)
+async def get_company_profile(
+    symbol: str,
+    service: MarketDataService = Depends(get_market_data_service),
+) -> CompanyProfileView:
+    """Get normalized company metadata for a symbol."""
+    try:
+        return await service.get_company_profile(symbol)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
