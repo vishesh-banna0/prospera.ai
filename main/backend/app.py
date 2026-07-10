@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,16 @@ from backend.core.config import get_settings
 from backend.core.exceptions import ProsperaError
 
 logger = logging.getLogger(__name__)
+
+
+def configure_event_loop_policy() -> None:
+    """Use an async DB-compatible event loop on Windows."""
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+configure_event_loop_policy()
 
 
 def create_app() -> FastAPI:

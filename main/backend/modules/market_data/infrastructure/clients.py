@@ -46,6 +46,20 @@ class ExternalMarketApiClient(ABC):
         return self._settings.market_data_api_key
 
     @property
+    def api_keys(self) -> tuple[str, ...]:
+        raw_keys = [
+            self._settings.market_data_api_key,
+            *str(getattr(self._settings, "market_data_api_keys", "")).split(","),
+        ]
+        keys: list[str] = []
+        for raw_key in raw_keys:
+            key = str(raw_key).strip()
+            if not key or key == "replace_with_real_api_key" or key in keys:
+                continue
+            keys.append(key)
+        return tuple(keys)
+
+    @property
     def base_url(self) -> str:
         return self._settings.market_data_base_url
 
@@ -157,21 +171,76 @@ class FinnhubClient(ExternalMarketApiClient):
 
         return payload
 
+    async def get_market_news(
+        self,
+        category: str = "general",
+        min_id: int = 0,
+    ) -> list[dict[str, Any]]:
+        payload = await self._get(
+            "/news",
+            {
+                "category": category,
+                "minId": min_id,
+            },
+        )
+
+        if not isinstance(payload, list):
+            raise MarketDataProviderError("Finnhub market news response was not a list.")
+
+        return [item for item in payload if isinstance(item, dict)]
+
+    async def get_company_news(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, Any]]:
+        payload = await self._get(
+            "/company-news",
+            {
+                "symbol": symbol,
+                "from": start_date,
+                "to": end_date,
+            },
+        )
+
+        if not isinstance(payload, list):
+            raise MarketDataProviderError("Finnhub company news response was not a list.")
+
+        return [item for item in payload if isinstance(item, dict)]
+
     async def _get(
         self,
         path: str,
         params: dict[str, Any],
     ) -> Any:
-        api_key = self.api_key.strip()
-        if not api_key or api_key == "replace_with_real_api_key":
+        api_keys = self.api_keys
+        if not api_keys:
             raise ConfigurationError(
-                "MARKET_DATA_API_KEY must be set to a valid Finnhub API key."
+                "MARKET_DATA_API_KEY or MARKET_DATA_API_KEYS must include a valid Finnhub API key."
             )
 
-        merged_params = {
-            **params,
-            "token": api_key,
-        }
+        last_provider_error: MarketDataProviderError | None = None
+        for api_key in api_keys:
+            try:
+                return await self._get_with_key(path, params, api_key)
+            except MarketDataProviderError as exc:
+                if not self._is_retryable_key_error(str(exc)):
+                    raise
+                last_provider_error = exc
+
+        if last_provider_error is not None:
+            raise last_provider_error
+
+        raise MarketDataProviderError("Finnhub request failed for all configured API keys.")
+
+    async def _get_with_key(
+        self,
+        path: str,
+        params: dict[str, Any],
+        api_key: str,
+    ) -> Any:
+        merged_params = {**params, "token": api_key}
 
         try:
             if self._http_client is not None:
@@ -196,8 +265,9 @@ class FinnhubClient(ExternalMarketApiClient):
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
             raise MarketDataProviderError(
-                f"Finnhub request failed with status {exc.response.status_code}."
+                f"Finnhub request failed with status {status_code}."
             ) from exc
 
         try:
@@ -209,6 +279,24 @@ class FinnhubClient(ExternalMarketApiClient):
             raise MarketDataProviderError(str(payload["error"]))
 
         return payload
+
+    def _is_retryable_key_error(
+        self,
+        message: str,
+    ) -> bool:
+        normalized = message.lower()
+        return any(
+            token in normalized
+            for token in (
+                "status 401",
+                "status 403",
+                "status 429",
+                "invalid api key",
+                "api limit",
+                "rate limit",
+                "too many requests",
+            )
+        )
 
 
 class YFinanceClient:

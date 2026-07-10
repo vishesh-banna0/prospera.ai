@@ -47,6 +47,9 @@ from backend.modules.market_data.infrastructure.repositories import (
     SqlMarketDataRepository,
     YFinanceHistoricalDataProvider,
 )
+from backend.modules.news.application.services import NewsIntelligenceService
+from backend.modules.news.infrastructure.repositories import FinnhubNewsProvider
+from backend.modules.news.infrastructure.repositories import SqlNewsArticleRepository
 
 
 _engine = None
@@ -107,6 +110,28 @@ async def get_market_data_service(
         historical_price_provider=yfinance_provider,
         company_profile_repository=market_data_repository,
         company_profile_provider=yfinance_provider,
+        commit=session.commit,
+    )
+
+
+async def get_news_intelligence_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> NewsIntelligenceService:
+    """
+    Provide news intelligence service.
+    """
+    settings = get_settings()
+
+    provider_name = settings.market_data_provider.strip().lower()
+    if provider_name != "finnhub":
+        raise ConfigurationError(
+            "MARKET_DATA_PROVIDER must be set to 'finnhub' for the current news integration."
+        )
+
+    client = FinnhubClient(settings=settings)
+    return NewsIntelligenceService(
+        repository=SqlNewsArticleRepository(session),
+        provider=FinnhubNewsProvider(client),
         commit=session.commit,
     )
 

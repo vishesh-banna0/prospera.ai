@@ -374,6 +374,56 @@ Response:
 }
 ```
 
+### News Intelligence
+
+Phase 7 adds a news warehouse and an explicit ingestion pipeline:
+
+`News Sources -> Collection -> Deduplication -> Cleaning -> Classification -> Storage`
+
+The current provider adapter uses Finnhub with the existing `MARKET_DATA_PROVIDER`, `MARKET_DATA_API_KEY`, and `MARKET_DATA_BASE_URL` settings. Articles are normalized into `news_articles` and classified as `global`, `india`, `company`, or `sector`.
+
+#### Sync News
+
+```bash
+POST /api/v1/news/sync
+Content-Type: application/json
+
+{
+  "categories": ["global", "india", "company", "sector"],
+  "symbols": ["AAPL", "RELIANCE.NS"],
+  "sectors": ["Technology", "Financial Services"],
+  "start_at": "2026-07-01T00:00:00Z",
+  "end_at": "2026-07-05T23:59:59Z",
+  "limit": 50
+}
+```
+
+Response:
+```json
+{
+  "requested_categories": ["global", "india", "company", "sector"],
+  "fetched_count": 75,
+  "stored_count": 68,
+  "duplicate_count": 7,
+  "message": null
+}
+```
+
+#### Query News Warehouse
+
+```bash
+GET /api/v1/news/articles?category=company&symbol=AAPL&limit=20
+GET /api/v1/news/global
+GET /api/v1/news/india
+GET /api/v1/news/company/AAPL
+POST /api/v1/news/company/AAPL/sync?lookback_days=4&limit=50
+GET /api/v1/news/sector/Technology
+GET /api/v1/news/articles/{article_id}
+GET /api/v1/news/warehouse/stats
+```
+
+The warehouse supports filters for `category`, `symbol`, `sector`, `country`, and free-text `query`.
+
 ## Testing
 
 ### Running Tests Programmatically

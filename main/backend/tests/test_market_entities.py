@@ -36,6 +36,14 @@ from backend.shared.types import Symbol
 class StubSettings:
     market_data_provider = "finnhub"
     market_data_api_key = "test-key"
+    market_data_api_keys = ""
+    market_data_base_url = "https://finnhub.io/api/v1"
+
+
+class StubSettingsWithBackupKeys:
+    market_data_provider = "finnhub"
+    market_data_api_key = "bad-key"
+    market_data_api_keys = "test-key"
     market_data_base_url = "https://finnhub.io/api/v1"
 
 
@@ -279,6 +287,19 @@ async def test_finnhub_quote_repository_normalizes_quote_data() -> None:
     assert quote.previous_close is not None
     assert quote.previous_close.amount == Decimal("209.40")
     assert quote.as_of == datetime.fromtimestamp(1718971200, tz=UTC)
+
+
+@pytest.mark.asyncio
+async def test_finnhub_client_falls_back_to_backup_api_key() -> None:
+    async with _build_mock_client() as http_client:
+        client = FinnhubClient(
+            settings=StubSettingsWithBackupKeys(),
+            http_client=http_client,
+        )
+
+        quote = await client.get_quote("AAPL")
+
+    assert quote["c"] == 212.35
 
 
 @pytest.mark.asyncio

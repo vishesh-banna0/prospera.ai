@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.api.routes import environments, portfolios, market_data
+from backend.api.routes import environments, portfolios, market_data, news
 
 
 def create_api_router() -> APIRouter:
@@ -13,6 +13,7 @@ def create_api_router() -> APIRouter:
     api_router.include_router(environments.router)
     api_router.include_router(portfolios.router)
     api_router.include_router(market_data.router)
+    api_router.include_router(news.router)
     
     return api_router
 

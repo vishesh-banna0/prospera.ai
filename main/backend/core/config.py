@@ -47,6 +47,11 @@ class Settings(BaseSettings):
         alias="MARKET_DATA_API_KEY",
     )
 
+    market_data_api_keys: str = Field(
+        default="",
+        alias="MARKET_DATA_API_KEYS",
+    )
+
     market_data_base_url: str = Field(
         alias="MARKET_DATA_BASE_URL",
     )
