@@ -41,6 +41,12 @@ class EnvironmentModel(Base):
         nullable=False,
     )
 
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        default="USD",
+    )
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
@@ -99,6 +105,12 @@ class HoldingModel(Base):
         nullable=False,
     )
 
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        default="USD",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -151,6 +163,12 @@ class TransactionModel(Base):
     amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
         nullable=False,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        default="USD",
     )
 
     notes: Mapped[str | None] = mapped_column(
@@ -206,6 +224,12 @@ class PortfolioSnapshotModel(Base):
     unrealized_pnl: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
         nullable=False,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        default="USD",
     )
 
 # Purpose:

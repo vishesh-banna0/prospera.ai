@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
+from collections.abc import Callable
+
 from backend.modules.simulator.application.commands import (
     AddVirtualCashUseCase,
     BuyStockUseCase,
@@ -12,10 +15,12 @@ from backend.modules.simulator.application.commands import (
 from backend.modules.simulator.application.dto import (
     CashAdjustmentInput,
     CreateEnvironmentInput,
+    EnvironmentView,
     RenameEnvironmentInput,
     TradeOrderInput,
 )
 from backend.modules.simulator.application.queries import (
+    GetEnvironmentUseCase,
     GetHoldingsUseCase,
     GetPortfolioPerformanceUseCase,
     GetTransactionsUseCase,
@@ -43,10 +48,13 @@ class SimulatorService:
         withdraw_virtual_cash: WithdrawVirtualCashUseCase,
         buy_stock: BuyStockUseCase,
         sell_stock: SellStockUseCase,
+        get_environment: GetEnvironmentUseCase,
         get_holdings: GetHoldingsUseCase,
         get_transactions: GetTransactionsUseCase,
         get_portfolio_performance: GetPortfolioPerformanceUseCase,
+        commit: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
+        self._commit = commit
         self._create_environment = create_environment
         self._rename_environment = rename_environment
         self._delete_environment = delete_environment
@@ -57,6 +65,7 @@ class SimulatorService:
         self._buy_stock = buy_stock
         self._sell_stock = sell_stock
 
+        self._get_environment = get_environment
         self._get_holdings = get_holdings
         self._get_transactions = get_transactions
         self._get_portfolio_performance = get_portfolio_performance
@@ -64,44 +73,62 @@ class SimulatorService:
     async def create_environment(
         self,
         request: CreateEnvironmentInput,
-    ) -> None:
-        await self._create_environment.execute(request)
+    ) -> EnvironmentView:
+        view = await self._create_environment.execute(request)
+        await self._commit_changes()
+        return view
+
+    async def get_environment(
+        self,
+        environment_id: EnvironmentId,
+    ) -> EnvironmentView:
+        return await self._get_environment.execute(environment_id)
 
     async def rename_environment(
         self,
         request: RenameEnvironmentInput,
     ) -> None:
         await self._rename_environment.execute(request)
+        await self._commit_changes()
 
     async def delete_environment(
         self,
         environment_id: EnvironmentId,
     ) -> None:
         await self._delete_environment.execute(environment_id)
+        await self._commit_changes()
 
     async def add_virtual_cash(
         self,
         request: CashAdjustmentInput,
     ) -> None:
         await self._add_virtual_cash.execute(request)
+        await self._commit_changes()
 
     async def withdraw_virtual_cash(
         self,
         request: CashAdjustmentInput,
     ) -> None:
         await self._withdraw_virtual_cash.execute(request)
+        await self._commit_changes()
 
     async def buy_stock(
         self,
         request: TradeOrderInput,
     ) -> None:
         await self._buy_stock.execute(request)
+        await self._commit_changes()
 
     async def sell_stock(
         self,
         request: TradeOrderInput,
     ) -> None:
         await self._sell_stock.execute(request)
+        await self._commit_changes()
+
+    async def _commit_changes(self) -> None:
+        if self._commit is not None:
+            await self._commit()
 
     async def get_holdings(
         self,

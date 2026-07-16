@@ -90,17 +90,30 @@ Content-Type: application/json
 
 {
   "name": "My Portfolio",
-  "owner_type": "individual"
+  "owner_type": "user"
 }
 ```
+
+`owner_type` must be one of `user`, `ai`, `rl`, `backtest`.
 
 Response:
 ```json
 {
-  "status": "created",
-  "message": "Environment created successfully"
+  "environment_id": "env-123",
+  "name": "My Portfolio",
+  "owner_type": "user",
+  "cash_balance": "0.00",
+  "created_at": "2026-06-17T10:00:00Z"
 }
 ```
+
+#### Get Environment
+
+```bash
+GET /api/v1/environments/{environment_id}
+```
+
+Response: same shape as the create response above.
 
 #### Rename Environment
 
@@ -426,6 +439,15 @@ The warehouse supports filters for `category`, `symbol`, `sector`, `country`, an
 
 ## Testing
 
+### Automated Test Suite
+
+The pytest suite in `backend/tests` covers the simulator, market data, and news modules without requiring a live server or external network access (market data and news providers are exercised through mocked HTTP transports; the simulator's SQL repositories are exercised against an in-memory SQLite database via `aiosqlite`, which is in `requirements-dev.txt`).
+
+```bash
+pip install -r requirements-dev.txt
+pytest backend/tests -v
+```
+
 ### Running Tests Programmatically
 
 ```python
@@ -448,7 +470,7 @@ curl http://localhost:8000/health
 # Create environment
 curl -X POST http://localhost:8000/api/v1/environments \
   -H "Content-Type: application/json" \
-  -d '{"name": "Test", "owner_type": "individual"}'
+  -d '{"name": "Test", "owner_type": "user"}'
 
 # Deposit cash (replace {env_id})
 curl -X POST http://localhost:8000/api/v1/portfolios/{env_id}/cash/deposit \
@@ -499,15 +521,30 @@ Infrastructure Layer (Repositories, database)
 - **Policies**: Business logic functions (can_buy, calculate_cost_basis, etc.)
 - **DTOs**: Data transfer objects for API contracts
 
+### Core Database Layer (Phase 4)
+
+Each module owns its own raw SQL migration under `backend/modules/<module>/infrastructure/migrations/`. There is no migration runner yet; apply the `.sql` files to PostgreSQL in date order (or call `Base.metadata.create_all()` per module for local/SQLite development).
+
+The simulator's core tables (`20260618_phase4_5_core_simulator.sql`):
+
+- `environments`: id, owner type, name, cash balance, currency, active flag, timestamps.
+- `holdings`: id, environment id, symbol, quantity, average cost, currency, timestamps.
+- `transactions`: id, environment id, transaction type, symbol, quantity, executed price, amount, currency, notes, executed_at. Transactions are append-only.
+- `portfolio_snapshots`: periodic valuation snapshots per environment (reserved for future backtesting/RL use; not yet written by any use case).
+
 ### Market Data Pipeline
 
-The Phase 6 pipeline stores provider-independent data in PostgreSQL:
+The Phase 6 pipeline (`20260627_phase6_market_data.sql`) stores provider-independent data in PostgreSQL:
 
 - `market_instruments`: normalized symbol metadata, asset type, exchange, currency, sector, industry, and country.
 - `historical_price_bars`: daily OHLCV bars, adjusted close, dividends, split coefficients, source, and unique `(symbol, price_date)`.
 - `company_profiles`: normalized company metadata for company analysis and future intelligence modules.
 
 Provider adapters must implement contracts from `backend/modules/market_data/application/providers.py` and return domain entities from `backend/modules/market_data/domain/entities.py`. The application service handles validation, incremental append behavior, deduplication through repository upserts, and API-facing response mapping.
+
+### News Warehouse (Phase 7)
+
+The Phase 7 pipeline (`20260705_phase7_news_intelligence.sql`) stores normalized articles in `news_articles`, keyed by a generated `article_id` with a unique constraint on `url` and an indexed `content_hash` used for deduplication. GIN indexes cover the `symbols`, `sectors`, and `countries` JSON array columns for fast filtering.
 
 ## Configuration
 

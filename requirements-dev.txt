@@ -2,6 +2,7 @@
 pytest==8.4.1
 pytest-asyncio==1.0.0
 pytest-cov==6.2.1
+aiosqlite==0.21.0
 
 # Linting and formatting
 ruff==0.12.0

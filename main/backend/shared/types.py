@@ -54,8 +54,8 @@ class Money:
     currency: CurrencyCode = CurrencyCode(PortfolioCurrency.INR.value)
 
     def __post_init__(self) -> None:
-        normalized_amount = self.amount.quantize(Decimal("0.01"))
-        object.__setattr__(self, "amount", normalized_amount)
+        amount = self.amount if isinstance(self.amount, Decimal) else Decimal(str(self.amount))
+        object.__setattr__(self, "amount", amount.quantize(Decimal("0.01")))
 
     def __add__(self, other: "Money") -> "Money":
         self._assert_same_currency(other)

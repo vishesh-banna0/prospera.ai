@@ -60,5 +60,5 @@ Copy-Item .env.example .env
 
 - `requirements.txt` is intentionally backend-focused.
 - Frontend dependencies should be added later in their own frontend workspace.
-- Database migrations, Docker files, and CI setup can be added once backend implementation begins.
+- Each backend module ships its own raw SQL migration under `backend/modules/<module>/infrastructure/migrations/`; apply them to PostgreSQL in date order. Docker files and CI setup are still pending.
 - If you already created `.venv` using Python 3.14, delete that virtual environment and recreate it with Python 3.11.

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 from datetime import datetime
+from decimal import Decimal
 
 from backend.modules.market_data.application.services import MarketDataService
 from backend.modules.market_data.application.dto import QuoteRequest
 from backend.modules.simulator.application.dto import (
     CashAdjustmentInput,
     CreateEnvironmentInput,
+    EnvironmentView,
     RenameEnvironmentInput,
     TradeOrderInput,
 )
@@ -42,16 +45,23 @@ class CreateEnvironmentUseCase:
     async def execute(
         self,
         request: CreateEnvironmentInput,
-    ) -> None:
+    ) -> EnvironmentView:
         environment = SimulatorEnvironment(
             environment_id=str(uuid.uuid4()),
             owner_type=request.owner_type,
             name=request.name,
             cash_balance=Money(amount=0, currency="USD"),
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             is_active=True,
         )
         await self._environment_repository.save(environment)
+        return EnvironmentView(
+            environment_id=environment.environment_id,
+            name=environment.name,
+            owner_type=environment.owner_type,
+            cash_balance=str(environment.cash_balance.amount),
+            created_at=environment.created_at,
+        )
 
 
 class RenameEnvironmentUseCase:
@@ -71,7 +81,7 @@ class RenameEnvironmentUseCase:
         if environment is None:
             raise ValueError(f"Environment {request.environment_id} not found")
         environment.name = request.new_name
-        environment.updated_at = datetime.utcnow()
+        environment.updated_at = datetime.now(UTC)
         await self._environment_repository.save(environment)
 
 
@@ -113,14 +123,14 @@ class AddVirtualCashUseCase:
             amount=environment.cash_balance.amount + request.amount.amount,
             currency=environment.cash_balance.currency,
         )
-        environment.updated_at = datetime.utcnow()
+        environment.updated_at = datetime.now(UTC)
         await self._environment_repository.save(environment)
         transaction = Transaction(
             transaction_id=str(uuid.uuid4()),
             environment_id=request.environment_id,
             transaction_type=TransactionType.DEPOSIT,
             amount=request.amount,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(UTC),
         )
         await self._transaction_repository.save(transaction)
 
@@ -149,14 +159,14 @@ class WithdrawVirtualCashUseCase:
             amount=environment.cash_balance.amount - request.amount.amount,
             currency=environment.cash_balance.currency,
         )
-        environment.updated_at = datetime.utcnow()
+        environment.updated_at = datetime.now(UTC)
         await self._environment_repository.save(environment)
         transaction = Transaction(
             transaction_id=str(uuid.uuid4()),
             environment_id=request.environment_id,
             transaction_type=TransactionType.WITHDRAWAL,
             amount=request.amount,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(UTC),
         )
         await self._transaction_repository.save(transaction)
 
@@ -188,7 +198,7 @@ class BuyStockUseCase:
             QuoteRequest(symbol=request.symbol)
         )
         price = Money(
-            amount=float(quote.last_price),
+            amount=Decimal(str(quote.last_price)),
             currency=quote.currency,
         )
 
@@ -205,7 +215,7 @@ class BuyStockUseCase:
             amount=environment.cash_balance.amount - trade_cost.amount,
             currency=environment.cash_balance.currency,
         )
-        environment.updated_at = datetime.utcnow()
+        environment.updated_at = datetime.now(UTC)
         await self._environment_repository.save(environment)
 
         holdings = await self._holding_repository.list_by_environment(
@@ -223,7 +233,7 @@ class BuyStockUseCase:
                 symbol=request.symbol,
                 quantity=quantity,
                 average_cost=price,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             )
         else:
             new_avg_cost = calculate_cost_basis(
@@ -236,7 +246,7 @@ class BuyStockUseCase:
                 value=holding.quantity.value + quantity.value
             )
             holding.average_cost = new_avg_cost
-            holding.updated_at = datetime.utcnow()
+            holding.updated_at = datetime.now(UTC)
 
         await self._holding_repository.save(holding)
 
@@ -248,7 +258,7 @@ class BuyStockUseCase:
             symbol=request.symbol,
             quantity=quantity,
             executed_price=price,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(UTC),
         )
         await self._transaction_repository.save(transaction)
 
@@ -294,7 +304,7 @@ class SellStockUseCase:
             QuoteRequest(symbol=request.symbol)
         )
         price = Money(
-            amount=float(quote.last_price),
+            amount=Decimal(str(quote.last_price)),
             currency=quote.currency,
         )
 
@@ -307,13 +317,13 @@ class SellStockUseCase:
             amount=environment.cash_balance.amount + proceeds.amount,
             currency=environment.cash_balance.currency,
         )
-        environment.updated_at = datetime.utcnow()
+        environment.updated_at = datetime.now(UTC)
         await self._environment_repository.save(environment)
 
         new_quantity_value = holding.quantity.value - quantity.value
         if new_quantity_value > 0:
             holding.quantity = ShareQuantity(value=new_quantity_value)
-            holding.updated_at = datetime.utcnow()
+            holding.updated_at = datetime.now(UTC)
             await self._holding_repository.save(holding)
 
         transaction = Transaction(
@@ -324,6 +334,6 @@ class SellStockUseCase:
             symbol=request.symbol,
             quantity=quantity,
             executed_price=price,
-            executed_at=datetime.utcnow(),
+            executed_at=datetime.now(UTC),
         )
         await self._transaction_repository.save(transaction)

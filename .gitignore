@@ -79,4 +79,7 @@ docker-compose.override.yml
 tmp/
 temp/
 
+# Private working notes (not shared)
+progress.md
+
 # Local scratch files

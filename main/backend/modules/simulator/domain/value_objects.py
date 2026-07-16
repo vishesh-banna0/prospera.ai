@@ -17,6 +17,9 @@ class ShareQuantity:
     value: Decimal
 
     def __post_init__(self) -> None:
+        value = self.value if isinstance(self.value, Decimal) else Decimal(str(self.value))
+        object.__setattr__(self, "value", value)
+
         if self.value <= Decimal("0"):
             raise ValueError(
                 "Share quantity must be greater than zero."
@@ -56,6 +59,9 @@ class AverageCostBasis:
     value: Decimal
 
     def __post_init__(self) -> None:
+        value = self.value if isinstance(self.value, Decimal) else Decimal(str(self.value))
+        object.__setattr__(self, "value", value)
+
         if self.value < Decimal("0"):
             raise ValueError(
                 "Average cost basis cannot be negative."

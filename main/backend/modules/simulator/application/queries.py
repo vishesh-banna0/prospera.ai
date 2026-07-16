@@ -5,11 +5,13 @@ from decimal import Decimal
 from backend.modules.market_data.application.services import MarketDataService
 from backend.modules.market_data.application.dto import QuoteRequest
 from backend.modules.simulator.application.dto import (
+    EnvironmentView,
     HoldingView,
     PortfolioPerformanceView,
     TransactionView,
 )
 from backend.modules.simulator.domain.policies import (
+    calculate_return_percentage,
     calculate_unrealized_pnl,
     calculate_market_value,
 )
@@ -22,14 +24,42 @@ from backend.modules.simulator.domain.value_objects import ShareQuantity
 from backend.shared.types import EnvironmentId, Money
 
 
+class GetEnvironmentUseCase:
+    """Retrieve a single simulator environment by id."""
+
+    def __init__(
+        self,
+        environment_repository: EnvironmentRepository,
+    ) -> None:
+        self._environment_repository = environment_repository
+
+    async def execute(
+        self,
+        environment_id: EnvironmentId,
+    ) -> EnvironmentView:
+        environment = await self._environment_repository.get(environment_id)
+        if environment is None:
+            raise ValueError(f"Environment {environment_id} not found")
+
+        return EnvironmentView(
+            environment_id=environment.environment_id,
+            name=environment.name,
+            owner_type=environment.owner_type,
+            cash_balance=str(environment.cash_balance.amount),
+            created_at=environment.created_at,
+        )
+
+
 class GetHoldingsUseCase:
-    """Retrieve all holdings belonging to an environment."""
+    """Retrieve all holdings belonging to an environment, priced at current market value."""
 
     def __init__(
         self,
         holding_repository: HoldingRepository,
+        market_data_service: MarketDataService | None = None,
     ) -> None:
         self._holding_repository = holding_repository
+        self._market_data_service = market_data_service
 
     async def execute(
         self,
@@ -40,13 +70,37 @@ class GetHoldingsUseCase:
         )
         views = []
         for holding in holdings:
+            current_price = holding.average_cost
+            if self._market_data_service is not None:
+                try:
+                    quote = await self._market_data_service.get_quote(
+                        QuoteRequest(symbol=holding.symbol)
+                    )
+                    current_price = Money(
+                        amount=Decimal(str(quote.last_price)),
+                        currency=quote.currency,
+                    )
+                except Exception:
+                    current_price = holding.average_cost
+
+            market_value = calculate_market_value(holding.quantity, current_price)
+            unrealized_pnl = calculate_unrealized_pnl(
+                holding.quantity,
+                holding.average_cost,
+                current_price,
+            )
+            return_percentage = calculate_return_percentage(
+                holding.average_cost,
+                current_price,
+            )
+
             view = HoldingView(
                 symbol=holding.symbol,
                 quantity=float(holding.quantity.value),
                 average_cost=str(holding.average_cost.amount),
-                market_value=None,
-                unrealized_pnl=None,
-                return_percentage=None,
+                market_value=str(market_value.amount),
+                unrealized_pnl=str(unrealized_pnl.amount),
+                return_percentage=float(return_percentage),
             )
             views.append(view)
         return views

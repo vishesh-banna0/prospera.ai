@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from backend.modules.simulator.domain.entities import (
-    SimulatorEnvironment,
     Holding,
     PortfolioSnapshot,
+    SimulatorEnvironment,
     Transaction,
 )
 from backend.modules.simulator.domain.repositories import (
@@ -15,6 +15,7 @@ from backend.modules.simulator.domain.repositories import (
     PortfolioSnapshotRepository,
     TransactionRepository,
 )
+from backend.modules.simulator.domain.value_objects import ShareQuantity
 from backend.modules.simulator.infrastructure.models import (
     EnvironmentModel,
     HoldingModel,
@@ -22,10 +23,13 @@ from backend.modules.simulator.infrastructure.models import (
     TransactionModel,
 )
 from backend.shared.types import (
+    CurrencyCode,
     EnvironmentId,
     HoldingId,
-    PortfolioSnapshotId,
+    Money,
+    OwnerType,
     TransactionId,
+    TransactionType,
 )
 
 
@@ -39,12 +43,7 @@ class SqlEnvironmentRepository(EnvironmentRepository):
         self,
         environment_id: EnvironmentId,
     ) -> SimulatorEnvironment | None:
-        stmt = select(EnvironmentModel).where(
-            EnvironmentModel.environment_id == environment_id
-        )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-
+        model = await self._get_model(environment_id)
         if model is None:
             return None
 
@@ -54,37 +53,62 @@ class SqlEnvironmentRepository(EnvironmentRepository):
         self,
         environment: SimulatorEnvironment,
     ) -> None:
-        model = EnvironmentModel(
-            environment_id=environment.environment_id,
-            owner_type=environment.owner_type,
-            name=environment.name,
-            cash_balance=environment.cash_balance,
-            is_active=environment.is_active,
-        )
-        self._session.add(model)
+        model = await self._get_model(environment.environment_id)
+
+        if model is None:
+            self._session.add(
+                EnvironmentModel(
+                    environment_id=environment.environment_id,
+                    owner_type=environment.owner_type.value,
+                    name=environment.name,
+                    cash_balance=environment.cash_balance.amount,
+                    currency=str(environment.cash_balance.currency),
+                    is_active=environment.is_active,
+                    created_at=environment.created_at,
+                    updated_at=environment.updated_at,
+                )
+            )
+        else:
+            model.owner_type = environment.owner_type.value
+            model.name = environment.name
+            model.cash_balance = environment.cash_balance.amount
+            model.currency = str(environment.cash_balance.currency)
+            model.is_active = environment.is_active
+            model.updated_at = environment.updated_at
+
         await self._session.flush()
 
     async def delete(
         self,
         environment_id: EnvironmentId,
     ) -> None:
+        model = await self._get_model(environment_id)
+        if model is not None:
+            await self._session.delete(model)
+            await self._session.flush()
+
+    async def _get_model(
+        self,
+        environment_id: EnvironmentId,
+    ) -> EnvironmentModel | None:
         stmt = select(EnvironmentModel).where(
             EnvironmentModel.environment_id == environment_id
         )
         result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-
-        if model is not None:
-            await self._session.delete(model)
-            await self._session.flush()
+        return result.scalar_one_or_none()
 
     @staticmethod
     def _model_to_entity(model: EnvironmentModel) -> SimulatorEnvironment:
         return SimulatorEnvironment(
             environment_id=model.environment_id,
-            owner_type=model.owner_type,
+            owner_type=OwnerType(model.owner_type),
             name=model.name,
-            cash_balance=model.cash_balance,
+            cash_balance=Money(
+                amount=model.cash_balance,
+                currency=CurrencyCode(model.currency),
+            ),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
             is_active=model.is_active,
         )
 
@@ -126,14 +150,31 @@ class SqlHoldingRepository(HoldingRepository):
         self,
         holding: Holding,
     ) -> None:
-        model = HoldingModel(
-            holding_id=holding.holding_id,
-            environment_id=holding.environment_id,
-            symbol=holding.symbol,
-            quantity=holding.quantity,
-            cost_basis=holding.cost_basis,
+        stmt = select(HoldingModel).where(
+            HoldingModel.holding_id == holding.holding_id
         )
-        self._session.add(model)
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+
+        if model is None:
+            self._session.add(
+                HoldingModel(
+                    holding_id=holding.holding_id,
+                    environment_id=holding.environment_id,
+                    symbol=holding.symbol,
+                    quantity=holding.quantity.value,
+                    average_cost=holding.average_cost.amount,
+                    currency=str(holding.average_cost.currency),
+                    created_at=holding.created_at,
+                    updated_at=holding.updated_at,
+                )
+            )
+        else:
+            model.quantity = holding.quantity.value
+            model.average_cost = holding.average_cost.amount
+            model.currency = str(holding.average_cost.currency)
+            model.updated_at = holding.updated_at
+
         await self._session.flush()
 
     @staticmethod
@@ -142,8 +183,13 @@ class SqlHoldingRepository(HoldingRepository):
             holding_id=model.holding_id,
             environment_id=model.environment_id,
             symbol=model.symbol,
-            quantity=model.quantity,
-            cost_basis=model.cost_basis,
+            quantity=ShareQuantity(value=model.quantity),
+            average_cost=Money(
+                amount=model.average_cost,
+                currency=CurrencyCode(model.currency),
+            ),
+            created_at=model.created_at,
+            updated_at=model.updated_at,
         )
 
 
@@ -172,9 +218,11 @@ class SqlTransactionRepository(TransactionRepository):
         self,
         environment_id: EnvironmentId,
     ) -> list[Transaction]:
-        stmt = select(TransactionModel).where(
-            TransactionModel.environment_id == environment_id
-        ).order_by(TransactionModel.transaction_date.desc())
+        stmt = (
+            select(TransactionModel)
+            .where(TransactionModel.environment_id == environment_id)
+            .order_by(TransactionModel.executed_at.desc())
+        )
         result = await self._session.execute(stmt)
         models = result.scalars().all()
 
@@ -184,32 +232,61 @@ class SqlTransactionRepository(TransactionRepository):
         self,
         transaction: Transaction,
     ) -> None:
-        model = TransactionModel(
-            transaction_id=transaction.transaction_id,
-            environment_id=transaction.environment_id,
-            symbol=transaction.symbol,
-            side=transaction.side.value,
-            quantity=transaction.quantity,
-            price=transaction.price,
-            transaction_date=transaction.transaction_date,
+        currency = (
+            transaction.executed_price.currency
+            if transaction.executed_price is not None
+            else transaction.amount.currency
         )
-        self._session.add(model)
+        self._session.add(
+            TransactionModel(
+                transaction_id=transaction.transaction_id,
+                environment_id=transaction.environment_id,
+                transaction_type=transaction.transaction_type.value,
+                symbol=transaction.symbol,
+                quantity=(
+                    transaction.quantity.value
+                    if transaction.quantity is not None
+                    else None
+                ),
+                executed_price=(
+                    transaction.executed_price.amount
+                    if transaction.executed_price is not None
+                    else None
+                ),
+                amount=transaction.amount.amount,
+                currency=str(currency),
+                notes=transaction.notes,
+                executed_at=transaction.executed_at,
+            )
+        )
         await self._session.flush()
 
     @staticmethod
     def _model_to_entity(model: TransactionModel) -> Transaction:
-        from backend.modules.simulator.domain.value_objects import (
-            TransactionSide,
-        )
-
         return Transaction(
             transaction_id=model.transaction_id,
             environment_id=model.environment_id,
+            transaction_type=TransactionType(model.transaction_type),
+            amount=Money(
+                amount=model.amount,
+                currency=CurrencyCode(model.currency),
+            ),
+            executed_at=model.executed_at,
             symbol=model.symbol,
-            side=TransactionSide(model.side),
-            quantity=model.quantity,
-            price=model.price,
-            transaction_date=model.transaction_date,
+            quantity=(
+                ShareQuantity(value=model.quantity)
+                if model.quantity is not None
+                else None
+            ),
+            executed_price=(
+                Money(
+                    amount=model.executed_price,
+                    currency=CurrencyCode(model.currency),
+                )
+                if model.executed_price is not None
+                else None
+            ),
+            notes=model.notes,
         )
 
 
@@ -219,12 +296,15 @@ class SqlPortfolioSnapshotRepository(PortfolioSnapshotRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get(
+    async def get_latest(
         self,
-        snapshot_id: PortfolioSnapshotId,
+        environment_id: EnvironmentId,
     ) -> PortfolioSnapshot | None:
-        stmt = select(PortfolioSnapshotModel).where(
-            PortfolioSnapshotModel.snapshot_id == snapshot_id
+        stmt = (
+            select(PortfolioSnapshotModel)
+            .where(PortfolioSnapshotModel.environment_id == environment_id)
+            .order_by(PortfolioSnapshotModel.snapshot_at.desc())
+            .limit(1)
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -234,42 +314,33 @@ class SqlPortfolioSnapshotRepository(PortfolioSnapshotRepository):
 
         return self._model_to_entity(model)
 
-    async def list_by_environment(
-        self,
-        environment_id: EnvironmentId,
-    ) -> list[PortfolioSnapshot]:
-        stmt = select(PortfolioSnapshotModel).where(
-            PortfolioSnapshotModel.environment_id == environment_id
-        ).order_by(PortfolioSnapshotModel.snapshot_date.desc())
-        result = await self._session.execute(stmt)
-        models = result.scalars().all()
-
-        return [self._model_to_entity(model) for model in models]
-
     async def save(
         self,
         snapshot: PortfolioSnapshot,
     ) -> None:
-        model = PortfolioSnapshotModel(
-            snapshot_id=snapshot.snapshot_id,
-            environment_id=snapshot.environment_id,
-            total_value=snapshot.total_value,
-            cash_balance=snapshot.cash_balance,
-            market_value=snapshot.market_value,
-            snapshot_date=snapshot.snapshot_date,
+        self._session.add(
+            PortfolioSnapshotModel(
+                environment_id=snapshot.environment_id,
+                snapshot_at=snapshot.snapshot_at,
+                cash_balance=snapshot.cash_balance.amount,
+                portfolio_value=snapshot.portfolio_value.amount,
+                total_value=snapshot.total_value.amount,
+                unrealized_pnl=snapshot.unrealized_pnl.amount,
+                currency=str(snapshot.cash_balance.currency),
+            )
         )
-        self._session.add(model)
         await self._session.flush()
 
     @staticmethod
     def _model_to_entity(model: PortfolioSnapshotModel) -> PortfolioSnapshot:
+        currency = CurrencyCode(model.currency)
         return PortfolioSnapshot(
-            snapshot_id=model.snapshot_id,
             environment_id=model.environment_id,
-            total_value=model.total_value,
-            cash_balance=model.cash_balance,
-            market_value=model.market_value,
-            snapshot_date=model.snapshot_date,
+            snapshot_at=model.snapshot_at,
+            cash_balance=Money(amount=model.cash_balance, currency=currency),
+            portfolio_value=Money(amount=model.portfolio_value, currency=currency),
+            total_value=Money(amount=model.total_value, currency=currency),
+            unrealized_pnl=Money(amount=model.unrealized_pnl, currency=currency),
         )
 
 

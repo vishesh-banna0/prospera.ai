@@ -25,6 +25,7 @@ from backend.modules.simulator.application.commands import (
 )
 
 from backend.modules.simulator.application.queries import (
+    GetEnvironmentUseCase,
     GetHoldingsUseCase,
     GetTransactionsUseCase,
     GetPortfolioPerformanceUseCase,
@@ -186,8 +187,13 @@ async def get_simulator_service(
         market_data_service=market_data_service,
     )
 
+    get_environment = GetEnvironmentUseCase(
+        environment_repository=environment_repo,
+    )
+
     get_holdings = GetHoldingsUseCase(
         holding_repository=holding_repo,
+        market_data_service=market_data_service,
     )
 
     get_transactions = GetTransactionsUseCase(
@@ -208,7 +214,9 @@ async def get_simulator_service(
         withdraw_virtual_cash=withdraw_virtual_cash,
         buy_stock=buy_stock,
         sell_stock=sell_stock,
+        get_environment=get_environment,
         get_holdings=get_holdings,
         get_transactions=get_transactions,
         get_portfolio_performance=get_portfolio_performance,
+        commit=session.commit,
     )

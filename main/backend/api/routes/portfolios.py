@@ -6,6 +6,7 @@ from dataclasses import replace
 from backend.api.dependencies import get_simulator_service
 from backend.modules.simulator.application.dto import (
     CashAdjustmentInput,
+    HoldingView,
     TradeOrderInput,
     TransactionView,
     PortfolioPerformanceView,
@@ -26,7 +27,7 @@ async def add_virtual_cash(
     try:
         request = replace(request, environment_id=environment_id)
         await service.add_virtual_cash(request)
-        return {"status": "deposited", "amount": str(request.amount)}
+        return {"status": "deposited", "amount": str(request.amount.amount)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -41,7 +42,7 @@ async def withdraw_virtual_cash(
     try:
         request = replace(request, environment_id=environment_id)
         await service.withdraw_virtual_cash(request)
-        return {"status": "withdrawn", "amount": str(request.amount)}
+        return {"status": "withdrawn", "amount": str(request.amount.amount)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -76,11 +77,11 @@ async def sell_stock(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/{environment_id}/holdings", response_model=list[dict])
+@router.get("/{environment_id}/holdings", response_model=list[HoldingView])
 async def list_holdings(
     environment_id: EnvironmentId,
     service: SimulatorService = Depends(get_simulator_service),
-) -> list[dict]:
+) -> list[HoldingView]:
     """Get all holdings in environment."""
     try:
         holdings = await service.get_holdings(environment_id)

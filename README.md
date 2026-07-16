@@ -13,14 +13,13 @@ The platform starts with a strong backend foundation: a multi-environment market
 The current focus is **V1 backend foundation**.
 
 V1 includes:
-- A market simulator engine
-- Isolated portfolio environments
-- A centralized market data service
-- A Phase 6 market data pipeline for normalized historical prices, index data, company metadata, sectors, and industries
+- A market simulator engine (Phase 5) with isolated, persistent portfolio environments
+- A centralized market data service (Phase 6) for normalized historical prices, index data, company metadata, sectors, and industries
+- A news intelligence pipeline (Phase 7) with collection, deduplication, cleaning, classification, and warehouse storage for global, Indian, company, and sector news
 - Clean backend architecture for future expansion
 
 V1 does not yet include:
-- News intelligence pipelines
+- Structured event extraction from news (Phase 8)
 - Research RAG implementation
 - Prediction model training
 - RL agents
@@ -168,19 +167,24 @@ The backend is organized by responsibility, not by framework convenience.
 main/
 └── backend/                     # Backend root and application assembly boundary
     ├── api/                     # HTTP transport layer and route composition
-    │   └── routes/              # Endpoint groups for environments, portfolios, and market data
+    │   └── routes/              # Endpoint groups for environments, portfolios, market data, and news
     ├── core/                    # Cross-cutting configuration and shared backend concerns
     ├── modules/                 # Business modules grouped as bounded contexts
     │   ├── simulator/           # Isolated market simulator domain
     │   │   ├── domain/          # Business entities, value objects, policies, repository contracts
     │   │   ├── application/     # Commands, queries, DTOs, and service orchestration
-    │   │   └── infrastructure/  # Persistence models and repository implementations
-    │   └── market_data/         # Shared market data service boundary
-    │       ├── domain/          # Quotes, instruments, history, and provider-agnostic contracts
-    │       ├── application/     # Internal market data use cases and service contracts
-    │       └── infrastructure/  # Provider clients, adapters, and caching implementations
+    │   │   └── infrastructure/  # Persistence models, migrations, and repository implementations
+    │   ├── market_data/         # Shared market data service boundary
+    │   │   ├── domain/          # Quotes, instruments, history, and provider-agnostic contracts
+    │   │   ├── application/     # Internal market data use cases and service contracts
+    │   │   └── infrastructure/  # Provider clients, adapters, migrations, and caching implementations
+    │   └── news/                # News intelligence warehouse and ingestion pipeline
+    │       ├── domain/          # Article entities and repository contracts
+    │       ├── application/     # Sync/query services, provider contracts, and DTOs
+    │       └── infrastructure/  # Provider adapters, migrations, and persistence models
     ├── shared/                  # Small shared primitives used across modules
-    ├── app.py                   # Future FastAPI entry point
+    ├── tests/                   # Pytest suite covering all modules
+    ├── app.py                   # FastAPI entry point
     └── __init__.py              # Backend package marker
 ```
 
@@ -230,6 +234,17 @@ Quote retrieval, historical prices, symbol lookup, metadata, provider abstractio
 Should not contain:
 Portfolio rules or simulator state management.
 
+### `backend/modules/news`
+
+Purpose:
+Own the news intelligence warehouse and ingestion pipeline.
+
+Should contain:
+Provider adapters, article cleaning/classification/deduplication logic, and warehouse query workflows.
+
+Should not contain:
+Trading logic, structured event extraction, or reasoning/signal generation (later phases).
+
 ## Phase 6 Market Data Pipeline
 
 The market data module is now the single source of truth for historical market datasets used by the simulator, future backtesting, prediction models, portfolio analytics, company analysis, and RL environments.
@@ -258,6 +273,25 @@ Synchronization:
 
 Future provider integration:
 Implement the provider contracts in `backend/modules/market_data/application/providers.py`, return domain entities from the adapter, and wire the provider in `backend/api/dependencies.py`. Business logic and downstream consumers should not change. Mutual fund NAV support is prepared with a provider-independent `MutualFundNavRecord` shape, but full NAV ingestion is intentionally left for a later phase.
+
+## Phase 7 News Intelligence Pipeline
+
+The news module is a warehouse and ingestion pipeline for global, Indian, company, and sector news, feeding future event extraction, research, and reasoning phases.
+
+Processing stages:
+`News Sources -> Collection -> Cleaning -> Classification -> Deduplication -> Storage`
+
+Provider strategy:
+- Finnhub (via the existing `MARKET_DATA_PROVIDER` / `MARKET_DATA_API_KEY` settings) supplies general market news and per-symbol company news.
+- Additional providers can be added by implementing `NewsProviderContract` in `backend/modules/news/application/providers.py` and wiring the adapter in `backend/api/dependencies.py`.
+
+Storage:
+- `news_articles`: normalized articles with title, summary, body, source, category (`global`, `india`, `company`, `sector`), symbols, sectors, countries, keywords, a dedup `content_hash`, and a unique constraint on `url`.
+
+Behavior:
+- Cleaning collapses whitespace, normalizes labels, and derives a stable content hash used for deduplication.
+- Classification tags India-related coverage, matches sector keywords, and promotes articles with resolved symbols to the `company` category.
+- Deduplication compares URL, content hash, and provider external id before storage; `POST /api/v1/news/sync` reports `fetched_count`, `stored_count`, and `duplicate_count`.
 
 ### `backend/shared`
 
@@ -325,30 +359,17 @@ If a previous `.venv` was created with Python `3.14`, recreate it with Python `3
 
 ## Roadmap
 
-### Phase 1
-- System design
-- Backend architecture
-- Environment setup
-- Database planning
+The full phase-by-phase roadmap lives in [PLAN.md](PLAN.md). Current status:
 
-### Phase 2
-- Market simulator engine
-- Portfolio operations
-- Market data service
-
-### Phase 3
-- News collection and event extraction
-- Research ingestion and RAG foundation
-
-### Phase 4
-- Company analysis
-- Prediction models
-- Signal fusion and reasoning
-
-### Phase 5
-- AI portfolio manager
-- Backtesting engine
-- RL environment integration
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 1-3 | Planning, project setup, frontend foundation | Done |
+| 4 | Core database layer | Done |
+| 5 | Market simulator | Done |
+| 6 | Market data pipeline | Done |
+| 7 | News intelligence pipeline | Done |
+| 8 | Event extraction engine | Not started |
+| 9-21 | Research RAG through production deployment | Not started |
 
 ## Mission
 
