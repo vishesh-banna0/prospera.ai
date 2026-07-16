@@ -359,7 +359,7 @@ If a previous `.venv` was created with Python `3.14`, recreate it with Python `3
 
 ## Roadmap
 
-The full phase-by-phase roadmap lives in [PLAN.md](PLAN.md). Current status:
+Current status:
 
 | Phase | Scope | Status |
 |-------|-------|--------|
