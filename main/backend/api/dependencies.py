@@ -56,6 +56,13 @@ from backend.modules.events.application.services import EventExtractionService
 from backend.modules.events.infrastructure.extractors import RuleBasedEventExtractor
 from backend.modules.events.infrastructure.repositories import SqlNewsEventRepository
 
+from backend.modules.research.application.services import ResearchService
+from backend.modules.research.infrastructure.providers import (
+    HashingEmbedder,
+    PlainTextParser,
+)
+from backend.modules.research.infrastructure.repositories import SqlResearchRepository
+
 
 _engine = None
 _async_session_maker = None
@@ -156,6 +163,25 @@ async def get_event_extraction_service(
         article_repository=SqlNewsArticleRepository(session),
         event_repository=SqlNewsEventRepository(session),
         extractor=RuleBasedEventExtractor(),
+        commit=session.commit,
+    )
+
+
+async def get_research_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> ResearchService:
+    """
+    Provide research RAG service.
+
+    The default embedder is a deterministic feature-hashing embedder and the
+    default parser handles plain text (no model download, no network). Swap in
+    a sentence-transformers / hosted-API embedder or a PDF parser adapter here
+    to upgrade retrieval quality without changing the service, store, or routes.
+    """
+    return ResearchService(
+        repository=SqlResearchRepository(session),
+        embedder=HashingEmbedder(),
+        parser=PlainTextParser(),
         commit=session.commit,
     )
 
