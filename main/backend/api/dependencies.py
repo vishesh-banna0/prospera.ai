@@ -52,6 +52,10 @@ from backend.modules.news.application.services import NewsIntelligenceService
 from backend.modules.news.infrastructure.repositories import FinnhubNewsProvider
 from backend.modules.news.infrastructure.repositories import SqlNewsArticleRepository
 
+from backend.modules.events.application.services import EventExtractionService
+from backend.modules.events.infrastructure.extractors import RuleBasedEventExtractor
+from backend.modules.events.infrastructure.repositories import SqlNewsEventRepository
+
 
 _engine = None
 _async_session_maker = None
@@ -133,6 +137,25 @@ async def get_news_intelligence_service(
     return NewsIntelligenceService(
         repository=SqlNewsArticleRepository(session),
         provider=FinnhubNewsProvider(client),
+        commit=session.commit,
+    )
+
+
+async def get_event_extraction_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> EventExtractionService:
+    """
+    Provide event extraction service.
+
+    Reads articles from the news warehouse and writes structured events.
+    The default extractor is deterministic and rule-based (no external
+    dependency); swap in an LLM-backed adapter here to upgrade extraction
+    without changing the service, domain, or routes.
+    """
+    return EventExtractionService(
+        article_repository=SqlNewsArticleRepository(session),
+        event_repository=SqlNewsEventRepository(session),
+        extractor=RuleBasedEventExtractor(),
         commit=session.commit,
     )
 

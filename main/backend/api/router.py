@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.api.routes import environments, portfolios, market_data, news
+from backend.api.routes import environments, portfolios, market_data, news, events
 
 
 def create_api_router() -> APIRouter:
     """Create and configure the top-level API router."""
     api_router = APIRouter(prefix="/api/v1")
-    
+
     # Register route groups
     api_router.include_router(environments.router)
     api_router.include_router(portfolios.router)
     api_router.include_router(market_data.router)
     api_router.include_router(news.router)
-    
+    api_router.include_router(events.router)
+
     return api_router
 
 
