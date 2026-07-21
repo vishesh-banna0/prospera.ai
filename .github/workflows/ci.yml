@@ -1,0 +1,43 @@
+name: CI
+
+# Runs the linter and the full test suite on every push and pull request.
+# The whole test suite is offline (no network, no API keys), so CI is fully
+# deterministic and needs no secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Lint with ruff
+        working-directory: main
+        run: ruff check backend/ scripts/ test_api.py main.py
+
+      - name: Run tests
+        working-directory: main
+        run: python -m pytest backend/tests -v
+
+      - name: Offline end-to-end smoke test
+        working-directory: main
+        run: python test_api.py --skip-network
