@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Prospera design tokens. See DESIGN.md for the reasoning.
+ * The app is a dark instrument console — there is one theme by design.
+ *
+ * Colors are stored as space-separated RGB *channels* (not hex) so Tailwind's
+ * opacity modifiers work: `bg-up/40` compiles to rgb(var(--up) / 0.4). When you
+ * need a raw color in CSS/SVG, wrap it: rgb(var(--up)).
+ */
+:root {
+  --ink: 13 15 19;
+  --panel: 20 23 29;
+  --panel-2: 27 31 39;
+  --line: 38 43 52;
+  --line-2: 51 59 71;
+
+  --fg: 231 235 241;
+  --fg-dim: 152 162 177;
+  --fg-mute: 95 104 117;
+
+  /* the only chromatic colors in normal use — direction */
+  --up: 47 190 138;
+  --down: 232 90 69;
+  --hold: 139 148 162;
+
+  /* semantic, never used for market direction */
+  --warn: 224 160 56;
+  --ring: 198 210 226;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: rgb(var(--ink));
+    color: rgb(var(--fg));
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Every numeric context gets tabular figures — non-negotiable. */
+  .tnum,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 0;
+  }
+
+  /* Visible keyboard focus, colorless (belongs to chrome, not data). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--ring));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: rgb(var(--ring) / 0.3);
+  }
+
+  /* Quiet, precise scrollbars for a dense instrument. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-2)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-2));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  /* A small tracked-uppercase engraved-panel label. Used for eyebrows. */
+  .eyebrow {
+    font-family: var(--font-display), system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgb(var(--fg-mute));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

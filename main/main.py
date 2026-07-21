@@ -16,8 +16,17 @@ Environment Variables:
 """
 
 import argparse
+import asyncio
 import sys
 import logging
+
+# On Windows, psycopg's async mode cannot run on the default ProactorEventLoop.
+# This must be set in the entry module *before* uvicorn creates its loop — and at
+# module top-level so it also runs in the reload worker, which re-imports this
+# module on spawn. (backend.app sets the same policy, but uvicorn imports the app
+# lazily after the loop already exists, so that copy is too late on its own.)
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import uvicorn
 

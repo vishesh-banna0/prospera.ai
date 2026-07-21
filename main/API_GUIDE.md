@@ -441,7 +441,7 @@ The warehouse supports filters for `category`, `symbol`, `sector`, `country`, an
 
 > **Currency:** every monetary value returned by the API is in **INR**. Foreign
 > prices (e.g. AAPL in USD) are converted to INR — historical bars at ingestion,
-> live quotes on read (see `GUIDE.md`, "How money and currency work").
+> live quotes on read (see `docs/GUIDE.md`, "How money and currency work").
 
 ### Events (Phase 8)
 

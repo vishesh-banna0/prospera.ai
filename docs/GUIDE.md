@@ -237,25 +237,25 @@ Start the server and open `/docs`. Every capability is listed there. This is
 your map.
 
 **Step 2 — The entry point.**
-[`main/main.py`](main/main.py) → starts the server.
-[`main/backend/app.py`](main/backend/app.py) → builds the app, adds logging,
+[`main/main.py`](../main/main.py) → starts the server.
+[`main/backend/app.py`](../main/backend/app.py) → builds the app, adds logging,
 error handling, and creates database tables on startup.
 
 **Step 3 — One simple feature, end to end.** Follow "create an environment":
-1. [`backend/api/routes/environments.py`](main/backend/api/routes/environments.py) — the route (very short).
-2. [`backend/modules/simulator/application/services.py`](main/backend/modules/simulator/application/services.py) — the service it calls.
-3. [`backend/modules/simulator/application/commands.py`](main/backend/modules/simulator/application/commands.py) — `CreateEnvironmentUseCase` (the actual logic).
-4. [`backend/modules/simulator/domain/entities.py`](main/backend/modules/simulator/domain/entities.py) — what an "environment" *is*.
-5. [`backend/modules/simulator/infrastructure/repositories.py`](main/backend/modules/simulator/infrastructure/repositories.py) — how it's saved.
+1. [`backend/api/routes/environments.py`](../main/backend/api/routes/environments.py) — the route (very short).
+2. [`backend/modules/simulator/application/services.py`](../main/backend/modules/simulator/application/services.py) — the service it calls.
+3. [`backend/modules/simulator/application/commands.py`](../main/backend/modules/simulator/application/commands.py) — `CreateEnvironmentUseCase` (the actual logic).
+4. [`backend/modules/simulator/domain/entities.py`](../main/backend/modules/simulator/domain/entities.py) — what an "environment" *is*.
+5. [`backend/modules/simulator/infrastructure/repositories.py`](../main/backend/modules/simulator/infrastructure/repositories.py) — how it's saved.
 
 **Step 4 — The wiring.**
-[`backend/api/dependencies.py`](main/backend/api/dependencies.py) — this is the
+[`backend/api/dependencies.py`](../main/backend/api/dependencies.py) — this is the
 "composition root". It's where every service is assembled from its parts and
 where you'd swap a real implementation for a fake one. Read
 `get_simulator_service` slowly; it names every piece.
 
 **Step 5 — The shared building blocks.**
-[`backend/shared/types.py`](main/backend/shared/types.py) — meet `Money` (note it
+[`backend/shared/types.py`](../main/backend/shared/types.py) — meet `Money` (note it
 rounds and refuses to mix currencies) and the ID types.
 
 **Step 6 — A "smart" module.**
@@ -322,10 +322,10 @@ US stock like AAPL that natively trades in US Dollars.
   returns exactly and is fine for a learning/simulator project; per-day
   historical FX is a future enhancement.
 
-The relevant code: [`backend/shared/fx.py`](main/backend/shared/fx.py) (the rate
-table), [`backend/modules/market_data/infrastructure/fx.py`](main/backend/modules/market_data/infrastructure/fx.py)
+The relevant code: [`backend/shared/fx.py`](../main/backend/shared/fx.py) (the rate
+table), [`backend/modules/market_data/infrastructure/fx.py`](../main/backend/modules/market_data/infrastructure/fx.py)
 (live + fallback providers), and the conversion calls inside
-[`market_data/application/services.py`](main/backend/modules/market_data/application/services.py).
+[`market_data/application/services.py`](../main/backend/modules/market_data/application/services.py).
 
 ---
 
@@ -354,7 +354,7 @@ the tests and CI never touch the network. If the model is enabled but a call
 fails, the code automatically falls back to the deterministic version. You never
 get a broken feature.
 
-The tiny client lives in [`backend/shared/llm.py`](main/backend/shared/llm.py).
+The tiny client lives in [`backend/shared/llm.py`](../main/backend/shared/llm.py).
 
 ---
 
@@ -375,11 +375,11 @@ Say you want a new endpoint. Follow the module pattern:
    - `repositories.py`: an `InMemory…` version (for tests) **and** a `Sql…`
      version (for real use).
 4. **API** — add `backend/api/routes/<name>.py` with the endpoints, register it
-   in [`backend/api/router.py`](main/backend/api/router.py), and add a
+   in [`backend/api/router.py`](../main/backend/api/router.py), and add a
    `get_<name>_service` builder in
-   [`backend/api/dependencies.py`](main/backend/api/dependencies.py).
+   [`backend/api/dependencies.py`](../main/backend/api/dependencies.py).
 5. **Schema** — if you added a table, add your module's `Base` to
-   `_module_metadata()` in [`backend/core/database.py`](main/backend/core/database.py)
+   `_module_metadata()` in [`backend/core/database.py`](../main/backend/core/database.py)
    so it's auto-created.
 6. **Tests** — add `backend/tests/test_<name>_pipeline.py`. Test the pure domain
    math directly, and the service using the `InMemory…` repositories (no

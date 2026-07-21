@@ -45,7 +45,7 @@ The backend is **FastAPI**, so the full API is auto-documented and typed.
      with request/response schemas and a "Try it out" button. Live-explore here.
    - **`http://127.0.0.1:8000/redoc`** — the same, in a cleaner reading format.
    - **`http://127.0.0.1:8000/openapi.json`** — the machine-readable spec.
-2. A snapshot of the spec is committed at **[`main/openapi.json`](main/openapi.json)**
+2. A snapshot of the spec is committed at **[`main/openapi.json`](../main/openapi.json)**
    so you can generate a client before even running the backend.
 3. **Generate a typed client** (recommended — do not hand-write fetch calls):
    ```bash
@@ -54,7 +54,7 @@ The backend is **FastAPI**, so the full API is auto-documented and typed.
    ```
    Every request body and response is then fully typed in TypeScript.
 
-Also useful: [`main/API_GUIDE.md`](main/API_GUIDE.md) has copy-paste request/
+Also useful: [`main/API_GUIDE.md`](../main/API_GUIDE.md) has copy-paste request/
 response examples, and [`GUIDE.md`](GUIDE.md) has a **glossary** of every finance
 term (bullish, CAGR, XIRR, SIP, drawdown, …) if any are unfamiliar.
 
@@ -245,5 +245,5 @@ Full setup details and a glossary: **[GUIDE.md](GUIDE.md)**.
 ---
 
 *Everything here is backed by the live spec at `/openapi.json`
-([snapshot](main/openapi.json)). When in doubt, trust the spec — it is generated
+([snapshot](../main/openapi.json)). When in doubt, trust the spec — it is generated
 from the running code and is always current.*
