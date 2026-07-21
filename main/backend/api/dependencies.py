@@ -52,7 +52,10 @@ from backend.modules.news.infrastructure.repositories import SqlNewsArticleRepos
 
 from backend.modules.events.application.services import EventExtractionService
 from backend.modules.events.infrastructure.extractors import RuleBasedEventExtractor
+from backend.modules.events.infrastructure.llm_extractor import LLMEventExtractor
 from backend.modules.events.infrastructure.repositories import SqlNewsEventRepository
+
+from backend.shared.llm import build_llm_from_settings
 
 from backend.modules.research.application.services import ResearchService
 from backend.modules.research.infrastructure.providers import (
@@ -158,10 +161,16 @@ async def get_event_extraction_service(
     dependency); swap in an LLM-backed adapter here to upgrade extraction
     without changing the service, domain, or routes.
     """
+    rule_based = RuleBasedEventExtractor()
+    llm = build_llm_from_settings(get_settings())
+    # Use the LLM extractor when a model is configured (LLM_ENABLED=true),
+    # falling back to the deterministic rule-based extractor on any failure.
+    extractor = LLMEventExtractor(llm, fallback=rule_based) if llm else rule_based
+
     return EventExtractionService(
         article_repository=SqlNewsArticleRepository(session),
         event_repository=SqlNewsEventRepository(session),
-        extractor=RuleBasedEventExtractor(),
+        extractor=extractor,
         commit=session.commit,
     )
 
