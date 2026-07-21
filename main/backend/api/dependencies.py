@@ -80,6 +80,15 @@ from backend.modules.signals.infrastructure.repositories import (
     SqlFusedSignalRepository,
 )
 
+from backend.modules.reasoning.application.services import ReasoningService
+from backend.modules.reasoning.infrastructure.reasoners import (
+    DeterministicReasoner,
+    LLMReasoner,
+)
+from backend.modules.reasoning.infrastructure.repositories import (
+    SqlReasonedOpinionRepository,
+)
+
 
 # The request-scoped database session dependency now lives in
 # backend.core.database (get_db_session) so the engine/session factory is
@@ -259,6 +268,31 @@ async def get_signal_fusion_service(
         company_repository=SqlCompanyScoreRepository(session),
         prediction_repository=SqlPredictionRepository(session),
         signal_repository=SqlFusedSignalRepository(session),
+        commit=session.commit,
+    )
+
+
+async def get_reasoning_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> ReasoningService:
+    """
+    Provide the Phase 11 reasoning service.
+
+    Gathers the fused signal, company score, events, and research context, then
+    produces an explainable opinion. Uses the LLM reasoner when LLM_ENABLED=true
+    (falling back to the deterministic reasoner), else the deterministic one.
+    """
+    deterministic = DeterministicReasoner()
+    llm = build_llm_from_settings(get_settings())
+    reasoner = LLMReasoner(llm, fallback=deterministic) if llm else deterministic
+
+    return ReasoningService(
+        signal_repository=SqlFusedSignalRepository(session),
+        company_repository=SqlCompanyScoreRepository(session),
+        event_repository=SqlNewsEventRepository(session),
+        opinion_repository=SqlReasonedOpinionRepository(session),
+        reasoner=reasoner,
+        research_service=await get_research_service(session),
         commit=session.commit,
     )
 

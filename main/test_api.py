@@ -233,6 +233,17 @@ async def run_offline_suite(t: ApiTester, r: Results) -> None:
     status, _ = await t.call("GET", "/api/v1/signals/AAPL")
     r.ok("fetched stored fused signal") if status == 200 else r.fail(f"signal get failed ({status})")
 
+    # --- Reasoning (explainable stance + narrative) -------------------------
+    section("Reasoning")
+    status, opinion = await t.call("POST", "/api/v1/reasoning/analyze/AAPL")
+    if status == 200 and isinstance(opinion, dict) and opinion.get("explanation"):
+        r.ok(f"reasoned AAPL: {opinion.get('stance')} — {opinion.get('headline')}")
+    else:
+        r.fail(f"reasoning failed ({status}): {opinion}")
+
+    status, _ = await t.call("GET", "/api/v1/reasoning/AAPL")
+    r.ok("fetched stored opinion") if status == 200 else r.fail(f"reasoning get failed ({status})")
+
     # --- Cleanup -----------------------------------------------------------
     section("Cleanup")
     status, _ = await t.call("DELETE", f"/api/v1/environments/{env_id}")

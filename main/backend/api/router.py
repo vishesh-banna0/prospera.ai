@@ -12,6 +12,7 @@ from backend.api.routes import (
     company,
     prediction,
     signals,
+    reasoning,
 )
 
 
@@ -29,6 +30,7 @@ def create_api_router() -> APIRouter:
     api_router.include_router(company.router)
     api_router.include_router(prediction.router)
     api_router.include_router(signals.router)
+    api_router.include_router(reasoning.router)
 
     return api_router
 
