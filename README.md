@@ -5,6 +5,10 @@
 > **New to this project?** Start with **[GUIDE.md](GUIDE.md)** — a complete,
 > beginner-friendly walkthrough (run it in 5 minutes, every tool explained, a
 > guided code tour, and a glossary). No prior web-dev experience needed.
+>
+> **Building the frontend?** See **[FRONTEND_BRIEF.md](FRONTEND_BRIEF.md)** — the
+> API contract, suggested screens mapped to endpoints, constraints, and a build
+> order. A committed OpenAPI snapshot lives at [main/openapi.json](main/openapi.json).
 
 ## Overview
 
