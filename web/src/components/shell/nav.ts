@@ -18,7 +18,7 @@ export const NAV: NavSection[] = [
   {
     title: "Desk",
     items: [
-      { label: "Portfolio", href: "/portfolio", ready: false },
+      { label: "Portfolio", href: "/portfolio", ready: true },
       { label: "Markets", href: "/markets", ready: false },
     ],
   },
