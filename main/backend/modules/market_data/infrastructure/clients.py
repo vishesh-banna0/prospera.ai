@@ -352,6 +352,55 @@ class YFinanceClient:
             raise MarketDataUnavailableError(
                 f"Unable to retrieve yfinance profile for {symbol}: {exc}"
             ) from exc
+
+    async def get_quote(
+        self,
+        symbol: str,
+    ) -> dict[str, Any]:
+        """
+        A live-ish quote from yfinance's ``fast_info``. Works for exchanges that
+        Finnhub's free plan rejects (e.g. NSE/BSE), and reports the instrument's
+        native currency so the service can convert to INR like any other quote.
+        """
+
+        def load_quote() -> dict[str, Any]:
+            import yfinance as yf
+
+            info = yf.Ticker(symbol).fast_info
+
+            def read(*names: str) -> Any:
+                # fast_info supports both attribute (last_price) and item
+                # (["lastPrice"]) access; try each name both ways.
+                for name in names:
+                    try:
+                        value = getattr(info, name)
+                    except Exception:
+                        value = None
+                    if value is None:
+                        try:
+                            value = info[name]
+                        except Exception:
+                            value = None
+                    if value is not None:
+                        return value
+                return None
+
+            return {
+                "last": read("last_price", "lastPrice"),
+                "open": read("open"),
+                "high": read("day_high", "dayHigh"),
+                "low": read("day_low", "dayLow"),
+                "previous_close": read("previous_close", "previousClose"),
+                "currency": read("currency"),
+                "volume": read("last_volume", "lastVolume"),
+            }
+
+        try:
+            return await asyncio.to_thread(load_quote)
+        except Exception as exc:
+            raise MarketDataUnavailableError(
+                f"Unable to retrieve yfinance quote for {symbol}: {exc}"
+            ) from exc
 # Purpose:
 # Placeholder module for external market API clients and adapters.
 #

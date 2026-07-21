@@ -40,11 +40,13 @@ from backend.modules.market_data.infrastructure.fx import (
 )
 from backend.modules.market_data.infrastructure.repositories import (
     CompositeSymbolSearchRepository,
+    FallbackQuoteRepository,
     FinnhubMarketMetadataRepository,
     FinnhubQuoteRepository,
     FinnhubSymbolSearchRepository,
     SqlMarketDataRepository,
     YFinanceHistoricalDataProvider,
+    YFinanceQuoteRepository,
 )
 from backend.modules.news.application.services import NewsIntelligenceService
 from backend.modules.news.infrastructure.repositories import FinnhubNewsProvider
@@ -139,7 +141,12 @@ async def get_market_data_service(
     )
 
     return MarketDataService(
-        quote_repository=FinnhubQuoteRepository(client),
+        # Finnhub for US live quotes; yfinance covers NSE/BSE (Finnhub's free
+        # plan returns 403 there) and works even with no Finnhub key configured.
+        quote_repository=FallbackQuoteRepository(
+            primary=FinnhubQuoteRepository(client),
+            fallback=YFinanceQuoteRepository(),
+        ),
         historical_price_repository=market_data_repository,
         symbol_search_repository=CompositeSymbolSearchRepository(
             storage_repository=market_data_repository,

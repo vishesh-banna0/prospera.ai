@@ -9,6 +9,7 @@ from typing import Any
 
 from backend.core.exceptions import MarketDataProviderError
 from backend.core.exceptions import MarketDataUnavailableError
+from backend.core.logging import get_logger
 from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -34,6 +35,8 @@ from backend.shared.types import CurrencyCode
 from backend.shared.types import Money
 from backend.shared.types import Symbol
 from backend.shared.types import Timestamp
+
+logger = get_logger(__name__)
 
 
 class InMemoryQuoteRepository(QuoteRepository):
@@ -285,6 +288,97 @@ class FinnhubQuoteRepository(QuoteRepository):
             raise MarketDataProviderError(
                 "Finnhub returned an invalid quote timestamp."
             ) from exc
+
+
+class YFinanceQuoteRepository(QuoteRepository):
+    """
+    Live quote via yfinance. Serves exchanges Finnhub's free plan doesn't cover
+    (notably NSE/BSE), and works with no Finnhub key at all. Prices are reported
+    in the instrument's native currency; the service converts them to INR.
+    """
+
+    def __init__(self, client: YFinanceClient | None = None) -> None:
+        self._client = client or YFinanceClient()
+
+    async def get_quote(self, symbol: Symbol) -> MarketQuote:
+        raw = await self._client.get_quote(symbol)
+        currency = self._resolve_currency(raw.get("currency"), symbol)
+        last_price = self._require_decimal(raw.get("last"), symbol)
+
+        return MarketQuote(
+            symbol=symbol,
+            native_currency=currency,
+            last_price=Money(amount=last_price, currency=currency),
+            open_price=self._optional_money(raw.get("open"), currency),
+            high_price=self._optional_money(raw.get("high"), currency),
+            low_price=self._optional_money(raw.get("low"), currency),
+            previous_close=self._optional_money(raw.get("previous_close"), currency),
+            volume=self._optional_int(raw.get("volume")),
+            as_of=datetime.now(tz=UTC),
+        )
+
+    def _resolve_currency(self, raw_value: object, symbol: Symbol) -> CurrencyCode:
+        if raw_value:
+            return CurrencyCode(str(raw_value).upper())
+        # yfinance didn't report a currency — infer INR for Indian exchanges.
+        if str(symbol).upper().endswith((".NS", ".BO")):
+            return CurrencyCode("INR")
+        return CurrencyCode("USD")
+
+    def _optional_money(self, raw_value: object, currency: CurrencyCode) -> Money | None:
+        decimal_value = self._optional_decimal(raw_value)
+        if decimal_value is None:
+            return None
+        return Money(amount=decimal_value, currency=currency)
+
+    def _optional_decimal(self, raw_value: object) -> Decimal | None:
+        if raw_value in (None, ""):
+            return None
+        try:
+            decimal_value = Decimal(str(raw_value))
+        except (TypeError, ValueError, ArithmeticError):
+            return None
+        return decimal_value if decimal_value > Decimal("0") else None
+
+    def _require_decimal(self, raw_value: object, symbol: Symbol) -> Decimal:
+        decimal_value = self._optional_decimal(raw_value)
+        if decimal_value is None:
+            raise MarketDataUnavailableError(
+                f"yfinance did not return a usable price for {symbol}."
+            )
+        return decimal_value
+
+    def _optional_int(self, raw_value: object) -> int | None:
+        if raw_value in (None, ""):
+            return None
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+
+class FallbackQuoteRepository(QuoteRepository):
+    """
+    Try the primary quote provider; on any failure, fall back to the secondary.
+    This lets US quotes use Finnhub while NSE/BSE symbols — which Finnhub's free
+    plan rejects with HTTP 403 — transparently fall back to yfinance.
+    """
+
+    def __init__(self, primary: QuoteRepository, fallback: QuoteRepository) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    async def get_quote(self, symbol: Symbol) -> MarketQuote:
+        try:
+            return await self._primary.get_quote(symbol)
+        except Exception as exc:  # noqa: BLE001 - resilience: any provider failure
+            logger.info(
+                "Primary quote provider failed for %s (%s); falling back to %s.",
+                symbol,
+                exc,
+                type(self._fallback).__name__,
+            )
+            return await self._fallback.get_quote(symbol)
 
 
 class FinnhubSymbolSearchRepository(SymbolSearchRepository):
