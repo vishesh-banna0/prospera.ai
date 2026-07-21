@@ -7,10 +7,16 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { ApiError, isMissingKeyError } from "@/api/client";
 import { useSymbolSearch } from "../hooks";
 
-/** Type-ahead symbol search. Selecting a result routes to /markets/{symbol}. */
-export function SymbolSearch({ autoFocus, placeholder = "Search symbol or company…" }: {
+/** Type-ahead symbol search. Selecting a result routes to `{basePath}/{symbol}`
+ *  (Markets by default; the Intelligence page points it at itself). */
+export function SymbolSearch({
+  autoFocus,
+  placeholder = "Search symbol or company…",
+  basePath = "/markets",
+}: {
   autoFocus?: boolean;
   placeholder?: string;
+  basePath?: string;
 }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
@@ -27,7 +33,7 @@ export function SymbolSearch({ autoFocus, placeholder = "Search symbol or compan
   function choose(symbol: string) {
     setOpen(false);
     setTerm("");
-    router.push(`/markets/${encodeURIComponent(symbol)}`);
+    router.push(`${basePath}/${encodeURIComponent(symbol)}`);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {

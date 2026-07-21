@@ -25,10 +25,14 @@ export type InstrumentSearchResultView = S["InstrumentSearchResultView"];
 
 // Intelligence
 export type CompanyScoreView = S["CompanyScoreView"];
+export type CompanyScoresView = S["CompanyScoresView"];
 export type PredictionView = S["PredictionView"];
+export type PredictionsView = S["PredictionsView"];
 export type FusedSignalView = S["FusedSignalView"];
+export type FusedSignalsView = S["FusedSignalsView"];
 export type SignalComponentView = S["SignalComponentView"];
 export type ReasonedOpinionView = S["ReasonedOpinionView"];
+export type ReasonedOpinionsView = S["ReasonedOpinionsView"];
 
 // Backtesting
 export type BacktestResultView = S["BacktestResultView"];

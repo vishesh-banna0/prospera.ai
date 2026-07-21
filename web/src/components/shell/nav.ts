@@ -25,7 +25,7 @@ export const NAV: NavSection[] = [
   {
     title: "Machine",
     items: [
-      { label: "Intelligence", href: "/intelligence", ready: false },
+      { label: "Intelligence", href: "/intelligence", ready: true },
       { label: "Backtest", href: "/backtest", ready: false },
     ],
   },
