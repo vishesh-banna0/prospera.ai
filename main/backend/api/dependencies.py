@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-from typing import AsyncGenerator
-
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.database import get_db_session
 from backend.core.exceptions import ConfigurationError
 from backend.core.config import get_settings
 
@@ -35,11 +30,14 @@ from backend.modules.simulator.infrastructure.repositories import (
     SqlEnvironmentRepository,
     SqlHoldingRepository,
     SqlTransactionRepository,
-    SqlPortfolioSnapshotRepository,
 )
 
 from backend.modules.market_data.application.services import MarketDataService
 from backend.modules.market_data.infrastructure.clients import FinnhubClient
+from backend.modules.market_data.infrastructure.fx import (
+    StaticFxRateProvider,
+    YFinanceFxRateProvider,
+)
 from backend.modules.market_data.infrastructure.repositories import (
     CompositeSymbolSearchRepository,
     FinnhubMarketMetadataRepository,
@@ -64,33 +62,9 @@ from backend.modules.research.infrastructure.providers import (
 from backend.modules.research.infrastructure.repositories import SqlResearchRepository
 
 
-_engine = None
-_async_session_maker = None
-
-
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Provide request-scoped database session.
-    """
-    global _engine
-    global _async_session_maker
-
-    if _async_session_maker is None:
-        settings = get_settings()
-
-        _engine = create_async_engine(
-            settings.database_url,
-            echo=settings.app_debug,
-        )
-
-        _async_session_maker = async_sessionmaker(
-            _engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-
-    async with _async_session_maker() as session:
-        yield session
+# The request-scoped database session dependency now lives in
+# backend.core.database (get_db_session) so the engine/session factory is
+# shared across the app instead of being re-created here.
 
 
 async def get_market_data_service(
@@ -108,8 +82,31 @@ async def get_market_data_service(
         )
 
     client = FinnhubClient(settings=settings)
-    market_data_repository = SqlMarketDataRepository(session)
+    market_data_repository = SqlMarketDataRepository(
+        session,
+        base_currency=settings.base_currency,
+    )
     yfinance_provider = YFinanceHistoricalDataProvider()
+
+    # Static (offline) FX rates from config; used directly when FX_LIVE is off
+    # and as the fallback for the live yfinance provider otherwise.
+    static_fx = StaticFxRateProvider(
+        base_currency=settings.base_currency,
+        overrides={
+            "USD": settings.fx_usd_inr,
+            "EUR": settings.fx_eur_inr,
+            "GBP": settings.fx_gbp_inr,
+        },
+    )
+    fx_provider = (
+        YFinanceFxRateProvider(
+            fallback=static_fx,
+            base_currency=settings.base_currency,
+            ttl_seconds=settings.fx_cache_ttl_seconds,
+        )
+        if settings.fx_live
+        else static_fx
+    )
 
     return MarketDataService(
         quote_repository=FinnhubQuoteRepository(client),
@@ -122,6 +119,8 @@ async def get_market_data_service(
         historical_price_provider=yfinance_provider,
         company_profile_repository=market_data_repository,
         company_profile_provider=yfinance_provider,
+        fx_rate_provider=fx_provider,
+        base_currency=settings.base_currency,
         commit=session.commit,
     )
 
@@ -196,7 +195,8 @@ async def get_simulator_service(
     environment_repo = SqlEnvironmentRepository(session)
     holding_repo = SqlHoldingRepository(session)
     transaction_repo = SqlTransactionRepository(session)
-    snapshot_repo = SqlPortfolioSnapshotRepository(session)
+    # portfolio_snapshots are reserved for future backtesting/RL use and are
+    # not yet written by any use case, so no snapshot repository is wired here.
 
     market_data_service = await get_market_data_service(session)
 

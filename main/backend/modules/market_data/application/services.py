@@ -20,9 +20,11 @@ from backend.modules.market_data.application.dto import (
     SymbolSearchRequest,
 )
 from backend.modules.market_data.application.providers import CompanyProfileProviderContract
+from backend.modules.market_data.application.providers import FxRateProviderContract
 from backend.modules.market_data.application.providers import HistoricalPriceProviderContract
 from backend.modules.market_data.domain.entities import AssetType
 from backend.modules.market_data.domain.entities import CompanyProfile
+from backend.modules.market_data.domain.entities import HistoricalPriceBar
 from backend.modules.market_data.domain.entities import Instrument
 from backend.modules.market_data.domain.repositories import CompanyProfileRepository
 from backend.modules.market_data.domain.repositories import (
@@ -32,6 +34,7 @@ from backend.modules.market_data.domain.repositories import (
     SymbolSearchRepository,
 )
 from backend.shared.types import CurrencyCode
+from backend.shared.types import Money
 from backend.shared.types import Symbol
 
 
@@ -59,6 +62,8 @@ class MarketDataService:
         historical_price_provider: HistoricalPriceProviderContract | None = None,
         company_profile_repository: CompanyProfileRepository | None = None,
         company_profile_provider: CompanyProfileProviderContract | None = None,
+        fx_rate_provider: FxRateProviderContract | None = None,
+        base_currency: CurrencyCode = CurrencyCode("INR"),
         commit: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._quote_repository = quote_repository
@@ -68,7 +73,57 @@ class MarketDataService:
         self._historical_price_provider = historical_price_provider
         self._company_profile_repository = company_profile_repository
         self._company_profile_provider = company_profile_provider
+        self._fx_rate_provider = fx_rate_provider
+        self._base_currency = CurrencyCode(str(base_currency).upper())
         self._commit = commit
+
+    async def _to_base_money(self, money: Money | None) -> Money | None:
+        """Convert a native-currency Money into the base currency (INR).
+
+        No-op when no FX provider is configured or the amount is already in the
+        base currency, so callers can convert unconditionally.
+        """
+
+        if money is None:
+            return None
+        if self._fx_rate_provider is None:
+            return money
+        if str(money.currency).upper() == str(self._base_currency).upper():
+            return Money(amount=money.amount, currency=self._base_currency)
+        rate = await self._fx_rate_provider.get_rate_to_base(money.currency)
+        return Money(amount=money.amount * rate, currency=self._base_currency)
+
+    async def _convert_bar_to_base(self, bar: HistoricalPriceBar) -> HistoricalPriceBar:
+        """Return a copy of ``bar`` with every price converted into the base
+        currency. Used at ingestion so the warehouse stores INR."""
+
+        if (
+            self._fx_rate_provider is None
+            or str(bar.native_currency).upper() == str(self._base_currency).upper()
+        ):
+            return bar
+
+        rate = await self._fx_rate_provider.get_rate_to_base(bar.native_currency)
+
+        def scale(money: Money | None) -> Money | None:
+            if money is None:
+                return None
+            return Money(amount=money.amount * rate, currency=self._base_currency)
+
+        return HistoricalPriceBar(
+            symbol=bar.symbol,
+            native_currency=self._base_currency,
+            open_price=scale(bar.open_price),
+            high_price=scale(bar.high_price),
+            low_price=scale(bar.low_price),
+            close_price=scale(bar.close_price),
+            volume=bar.volume,
+            timestamp=bar.timestamp,
+            adjusted_close_price=scale(bar.adjusted_close_price),
+            split_coefficient=bar.split_coefficient,
+            dividend_amount=scale(bar.dividend_amount),
+            source=bar.source,
+        )
 
     async def get_quote(
         self,
@@ -78,22 +133,23 @@ class MarketDataService:
             request.symbol,
         )
 
+        # Convert every price into the base currency (INR) so the user only
+        # ever sees INR, regardless of the instrument's native trading currency.
+        last_price = await self._to_base_money(quote.last_price)
+        open_price = await self._to_base_money(quote.open_price)
+        high_price = await self._to_base_money(quote.high_price)
+        low_price = await self._to_base_money(quote.low_price)
+        previous_close = await self._to_base_money(quote.previous_close)
+        currency = last_price.currency if last_price else quote.native_currency
+
         return QuoteView(
             symbol=quote.symbol,
-            currency=quote.native_currency,
-            last_price=str(quote.last_price.amount),
-            open_price=str(quote.open_price.amount)
-            if quote.open_price
-            else None,
-            high_price=str(quote.high_price.amount)
-            if quote.high_price
-            else None,
-            low_price=str(quote.low_price.amount)
-            if quote.low_price
-            else None,
-            previous_close=str(quote.previous_close.amount)
-            if quote.previous_close
-            else None,
+            currency=currency,
+            last_price=str(last_price.amount),
+            open_price=str(open_price.amount) if open_price else None,
+            high_price=str(high_price.amount) if high_price else None,
+            low_price=str(low_price.amount) if low_price else None,
+            previous_close=str(previous_close.amount) if previous_close else None,
             volume=quote.volume,
             as_of=quote.as_of,
         )
@@ -206,8 +262,12 @@ class MarketDataService:
             start_at=effective_start_at,
             end_at=request.end_at,
         )
+        # Convert to the base currency (INR) at ingestion so the warehouse
+        # stores INR. A single (cached) rate is applied across the fetched
+        # window; per-date historical FX is a documented future enhancement.
+        converted_bars = [await self._convert_bar_to_base(bar) for bar in bars]
         stored_count = await self._historical_price_repository.upsert_price_history(
-            bars,
+            converted_bars,
         )
 
         if self._commit is not None:
@@ -246,10 +306,24 @@ class MarketDataService:
             if self._commit is not None:
                 await self._commit()
 
+        # Market cap is shown in the base currency (INR) for consistency; the
+        # instrument's true listing currency is retained internally to know
+        # what to convert from.
+        market_cap_view: str | None = None
+        display_currency = profile.native_currency
+        if profile.market_cap is not None:
+            converted = await self._to_base_money(
+                Money(amount=profile.market_cap, currency=profile.native_currency)
+            )
+            market_cap_view = str(converted.amount) if converted else str(profile.market_cap)
+            display_currency = converted.currency if converted else profile.native_currency
+        elif self._fx_rate_provider is not None:
+            display_currency = self._base_currency
+
         return CompanyProfileView(
             symbol=profile.symbol,
             instrument_name=profile.instrument_name,
-            currency=profile.native_currency,
+            currency=display_currency,
             exchange=profile.exchange,
             asset_type=profile.asset_type.value,
             sector=profile.sector,
@@ -257,7 +331,7 @@ class MarketDataService:
             country=profile.country,
             website=profile.website,
             description=profile.description,
-            market_cap=str(profile.market_cap) if profile.market_cap is not None else None,
+            market_cap=market_cap_view,
             employees=profile.employees,
         )
 

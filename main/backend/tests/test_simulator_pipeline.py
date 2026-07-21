@@ -43,9 +43,11 @@ class StubMarketDataService:
 
     async def get_quote(self, request) -> QuoteView:
         price = self._prices[str(request.symbol)]
+        # The real MarketDataService converts every quote into the base
+        # currency (INR); this stub mirrors that so trades stay single-currency.
         return QuoteView(
             symbol=request.symbol,
-            currency="USD",
+            currency="INR",
             last_price=str(price),
         )
 
@@ -118,7 +120,7 @@ async def test_buy_sell_flow_updates_holdings_transactions_and_performance() -> 
         await add_cash.execute(
             CashAdjustmentInput(
                 environment_id=env_id,
-                amount=Money(amount=Decimal("10000"), currency="USD"),
+                amount=Money(amount=Decimal("10000"), currency="INR"),
             )
         )
 
@@ -188,6 +190,33 @@ async def test_withdraw_more_than_balance_raises() -> None:
 
         with pytest.raises(ValueError):
             await withdraw_cash.execute(
+                CashAdjustmentInput(
+                    environment_id=environment.environment_id,
+                    amount=Money(amount=Decimal("100"), currency="INR"),
+                )
+            )
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_deposit_with_mismatched_currency_raises() -> None:
+    # Environments are created in USD; depositing a different currency must
+    # fail loudly rather than silently corrupting the balance (regression).
+    engine, session = await _build_session()
+    try:
+        environment_repo = SqlEnvironmentRepository(session)
+        transaction_repo = SqlTransactionRepository(session)
+        create_environment = CreateEnvironmentUseCase(environment_repo)
+        add_cash = AddVirtualCashUseCase(environment_repo, transaction_repo)
+
+        environment = await create_environment.execute(
+            CreateEnvironmentInput(name="FX Env", owner_type=OwnerType.USER)
+        )
+
+        with pytest.raises(ValueError):
+            await add_cash.execute(
                 CashAdjustmentInput(
                     environment_id=environment.environment_id,
                     amount=Money(amount=Decimal("100"), currency="USD"),

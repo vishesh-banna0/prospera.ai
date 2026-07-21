@@ -62,7 +62,7 @@ def main() -> None:
     args = parser.parse_args()
     settings = get_settings()
 
-    logger.info(f"Starting Prospera API Server")
+    logger.info("Starting Prospera API Server")
     logger.info(f"Environment: {settings.app_env}")
     logger.info(f"Debug: {settings.app_debug}")
     logger.info(f"Host: {args.host}:{args.port}")

@@ -50,7 +50,10 @@ class CreateEnvironmentUseCase:
             environment_id=str(uuid.uuid4()),
             owner_type=request.owner_type,
             name=request.name,
-            cash_balance=Money(amount=0, currency="USD"),
+            # Portfolios are denominated in the platform base currency (INR).
+            # Market prices are converted to INR by the market data service, so
+            # cash, trades, holdings, and transactions are all stored in INR.
+            cash_balance=Money(amount=0, currency="INR"),
             created_at=datetime.now(UTC),
             is_active=True,
         )
@@ -119,6 +122,11 @@ class AddVirtualCashUseCase:
         environment = await self._environment_repository.get(request.environment_id)
         if environment is None:
             raise ValueError(f"Environment {request.environment_id} not found")
+        if request.amount.currency != environment.cash_balance.currency:
+            raise ValueError(
+                f"Deposit currency {request.amount.currency} does not match "
+                f"environment currency {environment.cash_balance.currency}."
+            )
         environment.cash_balance = Money(
             amount=environment.cash_balance.amount + request.amount.amount,
             currency=environment.cash_balance.currency,
@@ -153,6 +161,11 @@ class WithdrawVirtualCashUseCase:
         environment = await self._environment_repository.get(request.environment_id)
         if environment is None:
             raise ValueError(f"Environment {request.environment_id} not found")
+        if request.amount.currency != environment.cash_balance.currency:
+            raise ValueError(
+                f"Withdrawal currency {request.amount.currency} does not match "
+                f"environment currency {environment.cash_balance.currency}."
+            )
         if environment.cash_balance < request.amount:
             raise ValueError("Insufficient cash balance")
         environment.cash_balance = Money(

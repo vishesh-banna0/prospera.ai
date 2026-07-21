@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from abc import abstractmethod
+from decimal import Decimal
 
 from backend.modules.market_data.domain.entities import CompanyProfile
 from backend.modules.market_data.domain.entities import (
@@ -84,6 +85,24 @@ class MarketMetadataProviderContract(ABC):
     async def get_metadata(
         self,
     ) -> MarketMetadata:
+        raise NotImplementedError
+
+
+class FxRateProviderContract(ABC):
+    """
+    Contract for resolving a currency's conversion rate into the base currency.
+
+    ``get_rate_to_base("USD")`` returns how many base-currency (INR) units one
+    USD is worth. The default adapter uses static, configurable rates (offline);
+    a real-time adapter fetches live rates. Callers convert amounts by
+    multiplying, so this one method is all the service needs.
+    """
+
+    @abstractmethod
+    async def get_rate_to_base(
+        self,
+        currency: str,
+    ) -> Decimal:
         raise NotImplementedError
 # Purpose:
 # Declares provider-facing contracts used by the market data service.

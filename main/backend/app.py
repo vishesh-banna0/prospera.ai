@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import sys
+import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,8 +12,9 @@ from fastapi.responses import JSONResponse
 from backend.api.router import create_api_router
 from backend.core.config import get_settings
 from backend.core.exceptions import ProsperaError
+from backend.core.logging import configure_logging, get_logger, request_id_var
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def configure_event_loop_policy() -> None:
@@ -29,6 +31,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
 
     settings = get_settings()
+    configure_logging(settings.log_level)
 
     app = FastAPI(
         title=settings.app_name,
@@ -55,16 +58,58 @@ def create_app() -> FastAPI:
         logger.info(
             f"Starting {settings.app_name} in {settings.app_env} environment"
         )
+        if settings.db_auto_create:
+            try:
+                from backend.core.database import create_all_tables
+
+                await create_all_tables()
+            except Exception as exc:  # best-effort: don't block boot on DB
+                logger.warning(
+                    "Could not auto-create database tables on startup "
+                    "(the app will still start; DB-backed endpoints may fail "
+                    "until the database is reachable): %s",
+                    exc,
+                )
 
     @app.on_event("shutdown")
     async def shutdown_event() -> None:
         logger.info(f"Shutting down {settings.app_name}")
+        from backend.core.database import dispose_engine
+
+        await dispose_engine()
 
     return app
 
 
 def register_middlewares(app: FastAPI) -> None:
     """Register application middleware."""
+
+    @app.middleware("http")
+    async def request_context_middleware(request: Request, call_next):
+        """Give each request a short id, log it, and time it.
+
+        The id is stored in a contextvar so every log line emitted while
+        handling the request is tagged with it, and returned in the
+        ``X-Request-ID`` response header for client-side correlation.
+        """
+
+        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:8]
+        token = request_id_var.set(request_id)
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "%s %s -> %s (%.1f ms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+        )
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     app.add_middleware(
         CORSMiddleware,

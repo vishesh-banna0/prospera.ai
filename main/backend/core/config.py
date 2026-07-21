@@ -35,15 +35,32 @@ class Settings(BaseSettings):
     app_host: str = Field(default="127.0.0.1", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
 
-    database_url: str = Field(alias="DATABASE_URL")
+    # Defaults to a local SQLite file so a fresh clone runs offline with zero
+    # setup. Point this at PostgreSQL (postgresql+psycopg://...) for real use.
+    database_url: str = Field(
+        default="sqlite+aiosqlite:///./prospera.db",
+        alias="DATABASE_URL",
+    )
 
-    redis_url: str = Field(alias="REDIS_URL")
+    # When true, the app creates any missing tables on startup (convenient for
+    # SQLite / local dev). In production, apply the per-module SQL migrations
+    # instead and set this to false.
+    db_auto_create: bool = Field(default=True, alias="DB_AUTO_CREATE")
+
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL",
+    )
 
     market_data_provider: str = Field(
+        default="finnhub",
         alias="MARKET_DATA_PROVIDER",
     )
 
+    # Empty by default so the app boots without a key; market-data and news
+    # endpoints then return a clear error until a real key is configured.
     market_data_api_key: str = Field(
+        default="",
         alias="MARKET_DATA_API_KEY",
     )
 
@@ -53,8 +70,36 @@ class Settings(BaseSettings):
     )
 
     market_data_base_url: str = Field(
+        default="https://finnhub.io/api/v1",
         alias="MARKET_DATA_BASE_URL",
     )
+
+    # --- Currency / FX -------------------------------------------------------
+    # Prospera presents every monetary value to the user in one base currency
+    # (INR). Foreign-currency prices (e.g. AAPL in USD) are converted to INR.
+    # When fx_live is true, a real-time rate is fetched from yfinance (the
+    # {CUR}INR=X pair) and cached; if that fetch fails, or fx_live is false, the
+    # static fallback rates below are used so the app always works offline.
+    base_currency: str = Field(default="INR", alias="BASE_CURRENCY")
+    fx_live: bool = Field(default=True, alias="FX_LIVE")
+    fx_cache_ttl_seconds: int = Field(default=3600, alias="FX_CACHE_TTL_SECONDS")
+    fx_usd_inr: float = Field(default=83.0, alias="FX_USD_INR")
+    fx_eur_inr: float = Field(default=90.0, alias="FX_EUR_INR")
+    fx_gbp_inr: float = Field(default=105.0, alias="FX_GBP_INR")
+
+    # --- Hosted LLM configuration (optional) ---------------------------------
+    # Prospera never downloads model weights. The LLM-backed adapters (event
+    # extraction, reasoning) call a hosted, OpenAI-compatible chat endpoint
+    # (e.g. a shared Llama / vLLM / OpenAI gateway). Leave llm_enabled=false to
+    # keep the deterministic, offline default adapters everywhere.
+    llm_enabled: bool = Field(default=False, alias="LLM_ENABLED")
+    llm_base_url: str = Field(
+        default="http://localhost:11434/v1",
+        alias="LLM_BASE_URL",
+    )
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
+    llm_model: str = Field(default="llama3.1", alias="LLM_MODEL")
+    llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     # shows more detailed logs in development and less verbose logs in production,

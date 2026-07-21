@@ -626,8 +626,13 @@ class SqlMarketDataRepository(
     def __init__(
         self,
         session: AsyncSession,
+        base_currency: str = "INR",
     ) -> None:
         self._session = session
+        # Historical bars are stored already converted into the base currency
+        # (see MarketDataService ingestion), so they are always reconstructed in
+        # the base currency rather than the instrument's listing currency.
+        self._base_currency = CurrencyCode(str(base_currency).upper())
 
     async def get_price_history(
         self,
@@ -647,14 +652,11 @@ class SqlMarketDataRepository(
         stmt = stmt.order_by(HistoricalPriceModel.price_date.asc())
         result = await self._session.execute(stmt)
         models = result.scalars().all()
-        instrument = await self.get_instrument(symbol)
-        currency = (
-            instrument.native_currency
-            if instrument is not None
-            else CurrencyCode("USD")
-        )
 
-        return [self._price_model_to_entity(model, currency) for model in models]
+        return [
+            self._price_model_to_entity(model, self._base_currency)
+            for model in models
+        ]
 
     async def get_latest_price_timestamp(
         self,

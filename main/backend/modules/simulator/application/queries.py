@@ -20,7 +20,6 @@ from backend.modules.simulator.domain.repositories import (
     HoldingRepository,
     TransactionRepository,
 )
-from backend.modules.simulator.domain.value_objects import ShareQuantity
 from backend.shared.types import EnvironmentId, Money
 
 
