@@ -64,6 +64,11 @@ from backend.modules.research.infrastructure.providers import (
 )
 from backend.modules.research.infrastructure.repositories import SqlResearchRepository
 
+from backend.modules.company.application.services import CompanyIntelligenceService
+from backend.modules.company.infrastructure.repositories import (
+    SqlCompanyScoreRepository,
+)
+
 
 # The request-scoped database session dependency now lives in
 # backend.core.database (get_db_session) so the engine/session factory is
@@ -190,6 +195,23 @@ async def get_research_service(
         repository=SqlResearchRepository(session),
         embedder=HashingEmbedder(),
         parser=PlainTextParser(),
+        commit=session.commit,
+    )
+
+
+async def get_company_intelligence_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> CompanyIntelligenceService:
+    """
+    Provide the Phase 10 company intelligence service.
+
+    Reads company profiles + price history through the market data service and
+    recent events from the events warehouse, then stores comparable scorecards.
+    """
+    return CompanyIntelligenceService(
+        market_data_service=await get_market_data_service(session),
+        event_repository=SqlNewsEventRepository(session),
+        score_repository=SqlCompanyScoreRepository(session),
         commit=session.commit,
     )
 

@@ -194,6 +194,23 @@ async def run_offline_suite(t: ApiTester, r: Results) -> None:
     status, _ = await t.call("GET", "/api/v1/events/stats")
     r.ok("events stats reachable") if status == 200 else r.fail(f"events stats failed ({status})")
 
+    # --- Company intelligence (offline: neutral score with no market data) --
+    section("Company intelligence")
+    status, score = await t.call("POST", "/api/v1/company/analyze/AAPL?lookback_days=90")
+    if status == 200 and isinstance(score, dict) and "overall_score" in score:
+        r.ok(f"scored AAPL: overall={score.get('overall_score')} rating={score.get('rating')}")
+    else:
+        r.fail(f"company analyze failed ({status}): {score}")
+
+    status, _ = await t.call("GET", "/api/v1/company/AAPL")
+    r.ok("fetched stored company score") if status == 200 else r.fail(f"company get failed ({status})")
+
+    status, listing = await t.call("GET", "/api/v1/company/")
+    if status == 200 and isinstance(listing, dict):
+        r.ok(f"company list returned ({listing.get('count')} companies)")
+    else:
+        r.fail(f"company list failed ({status})")
+
     # --- Cleanup -----------------------------------------------------------
     section("Cleanup")
     status, _ = await t.call("DELETE", f"/api/v1/environments/{env_id}")

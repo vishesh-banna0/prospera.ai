@@ -9,6 +9,7 @@ from backend.api.routes import (
     news,
     events,
     research,
+    company,
 )
 
 
@@ -23,6 +24,7 @@ def create_api_router() -> APIRouter:
     api_router.include_router(news.router)
     api_router.include_router(events.router)
     api_router.include_router(research.router)
+    api_router.include_router(company.router)
 
     return api_router
 

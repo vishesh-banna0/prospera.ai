@@ -29,6 +29,7 @@ def _module_metadata() -> list[MetaData]:
     "which tables exist" list in one obvious place.
     """
 
+    from backend.modules.company.infrastructure.models import Base as CompanyBase
     from backend.modules.events.infrastructure.models import Base as EventsBase
     from backend.modules.market_data.infrastructure.models import Base as MarketDataBase
     from backend.modules.news.infrastructure.models import Base as NewsBase
@@ -41,6 +42,7 @@ def _module_metadata() -> list[MetaData]:
         NewsBase.metadata,
         EventsBase.metadata,
         ResearchBase.metadata,
+        CompanyBase.metadata,
     ]
 
 
