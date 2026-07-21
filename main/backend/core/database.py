@@ -35,6 +35,7 @@ def _module_metadata() -> list[MetaData]:
     from backend.modules.news.infrastructure.models import Base as NewsBase
     from backend.modules.prediction.infrastructure.models import Base as PredictionBase
     from backend.modules.research.infrastructure.models import Base as ResearchBase
+    from backend.modules.signals.infrastructure.models import Base as SignalsBase
     from backend.modules.simulator.infrastructure.models import Base as SimulatorBase
 
     return [
@@ -45,6 +46,7 @@ def _module_metadata() -> list[MetaData]:
         ResearchBase.metadata,
         CompanyBase.metadata,
         PredictionBase.metadata,
+        SignalsBase.metadata,
     ]
 
 

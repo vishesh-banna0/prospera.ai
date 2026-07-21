@@ -75,6 +75,11 @@ from backend.modules.prediction.infrastructure.repositories import (
     SqlPredictionRepository,
 )
 
+from backend.modules.signals.application.services import SignalFusionService
+from backend.modules.signals.infrastructure.repositories import (
+    SqlFusedSignalRepository,
+)
+
 
 # The request-scoped database session dependency now lives in
 # backend.core.database (get_db_session) so the engine/session factory is
@@ -236,6 +241,24 @@ async def get_prediction_service(
         market_data_service=await get_market_data_service(session),
         model=LogisticBaselineModel(),
         repository=SqlPredictionRepository(session),
+        commit=session.commit,
+    )
+
+
+async def get_signal_fusion_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> SignalFusionService:
+    """
+    Provide the Phase 13 signal fusion service.
+
+    Blends the stored outputs of the news (Phase 8), company (Phase 10), and
+    prediction (Phase 12) layers into a unified Buy/Hold/Sell recommendation.
+    """
+    return SignalFusionService(
+        event_repository=SqlNewsEventRepository(session),
+        company_repository=SqlCompanyScoreRepository(session),
+        prediction_repository=SqlPredictionRepository(session),
+        signal_repository=SqlFusedSignalRepository(session),
         commit=session.commit,
     )
 

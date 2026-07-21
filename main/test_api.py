@@ -222,6 +222,17 @@ async def run_offline_suite(t: ApiTester, r: Results) -> None:
     status, _ = await t.call("GET", "/api/v1/predictions/")
     r.ok("prediction list reachable") if status == 200 else r.fail(f"prediction list failed ({status})")
 
+    # --- Signal fusion (blends the stored upstream signals) -----------------
+    section("Signal fusion")
+    status, fused = await t.call("POST", "/api/v1/signals/fuse/AAPL")
+    if status == 200 and isinstance(fused, dict) and "action" in fused:
+        r.ok(f"fused signal AAPL: {fused.get('action')} (score={fused.get('score')})")
+    else:
+        r.fail(f"signal fusion failed ({status}): {fused}")
+
+    status, _ = await t.call("GET", "/api/v1/signals/AAPL")
+    r.ok("fetched stored fused signal") if status == 200 else r.fail(f"signal get failed ({status})")
+
     # --- Cleanup -----------------------------------------------------------
     section("Cleanup")
     status, _ = await t.call("DELETE", f"/api/v1/environments/{env_id}")
