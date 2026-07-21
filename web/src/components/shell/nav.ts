@@ -32,8 +32,8 @@ export const NAV: NavSection[] = [
   {
     title: "Sources",
     items: [
-      { label: "News", href: "/news", ready: false },
-      { label: "Research", href: "/research", ready: false },
+      { label: "News", href: "/news", ready: true },
+      { label: "Research", href: "/research", ready: true },
     ],
   },
   {

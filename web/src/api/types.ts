@@ -39,8 +39,18 @@ export type BacktestResultView = S["BacktestResultView"];
 export type MetricsView = S["MetricsView"];
 export type EquityPointView = S["EquityPointView"];
 
-// News / research / events
+// News / events
 export type NewsArticleView = S["NewsArticleView"];
+export type NewsArticlesView = S["NewsArticlesView"];
+export type NewsWarehouseStatsView = S["NewsWarehouseStatsView"];
 export type EventView = S["EventView"];
+export type EventsView = S["EventsView"];
+export type EventStatsView = S["EventStatsView"];
+
+// Research
 export type DocumentView = S["DocumentView"];
+export type DocumentsView = S["DocumentsView"];
+export type ResearchStatsView = S["ResearchStatsView"];
 export type ResearchContextView = S["ResearchContextView"];
+export type RetrievedChunkView = S["RetrievedChunkView"];
+export type IngestDocumentView = S["IngestDocumentView"];

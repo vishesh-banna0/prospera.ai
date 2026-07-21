@@ -40,7 +40,8 @@ export function isPlanLimitError(error: unknown): boolean {
   return /\b403\b|forbidden/i.test(error.message);
 }
 
-type Json = Record<string, unknown> | unknown[];
+// Any JSON-serializable request body; JSON.stringify handles the shape.
+type Json = unknown;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
