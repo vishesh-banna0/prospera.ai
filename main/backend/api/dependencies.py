@@ -89,6 +89,8 @@ from backend.modules.reasoning.infrastructure.repositories import (
     SqlReasonedOpinionRepository,
 )
 
+from backend.modules.backtesting.application.services import BacktestService
+
 
 # The request-scoped database session dependency now lives in
 # backend.core.database (get_db_session) so the engine/session factory is
@@ -294,6 +296,20 @@ async def get_reasoning_service(
         reasoner=reasoner,
         research_service=await get_research_service(session),
         commit=session.commit,
+    )
+
+
+async def get_backtest_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> BacktestService:
+    """
+    Provide the Phase 15 backtesting service.
+
+    Stateless historical investment simulation over INR price history from the
+    market data service (lump-sum and SIP, with return + risk analytics).
+    """
+    return BacktestService(
+        market_data_service=await get_market_data_service(session),
     )
 
 

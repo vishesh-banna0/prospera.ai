@@ -269,6 +269,24 @@ async def run_network_suite(t: ApiTester, r: Results) -> None:
     else:
         r.skip(f"news sync unavailable offline ({status})")
 
+    section("Backtest lump sum (needs price history)")
+    status, bt = await t.call(
+        "POST",
+        "/api/v1/backtest/lumpsum",
+        {
+            "symbol": "AAPL",
+            "amount": 100000,
+            "start_at": "2023-01-01T00:00:00Z",
+            "end_at": "2024-12-31T00:00:00Z",
+        },
+    )
+    if status == 200 and isinstance(bt, dict) and bt.get("metrics"):
+        m = bt["metrics"]
+        r.ok(f"AAPL lumpsum: invested {m.get('total_invested')} -> {m.get('final_value')} INR "
+             f"(CAGR {m.get('cagr_pct')}%)")
+    else:
+        r.skip(f"backtest unavailable offline ({status})")
+
 
 @asynccontextmanager
 async def in_process_client():
