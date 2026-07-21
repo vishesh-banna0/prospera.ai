@@ -1,32 +1,51 @@
-import Link from "next/link";
+"use client";
 
-/**
- * Temporary landing while product screens are built out (frontend prompt §6).
- * Portfolio is live; the rest land in order.
- */
+import Link from "next/link";
+import { SymbolSearch } from "@/features/markets/components/SymbolSearch";
+import { PortfolioSnapshot } from "@/features/home/PortfolioSnapshot";
+import { MachineCalls } from "@/features/home/MachineCalls";
+import { LatestNews } from "@/features/home/LatestNews";
+
+const EXAMPLES = ["AAPL", "MSFT", "RELIANCE.NS"];
+
+/** The console. It opens on data — a portfolio snapshot, the machine's latest
+ *  calls, the tape, and a way to analyze anything. */
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16">
-      <p className="eyebrow">System</p>
-      <h1 className="mt-2 font-display text-xl font-bold text-fg">Prospera console</h1>
-      <p className="mt-3 max-w-prose text-sm text-fg-dim">
-        Virtual cash, real prices, machine opinions — in rupees. The Portfolio
-        Center is live; Markets and Intelligence follow.
-      </p>
-      <div className="mt-6 flex flex-wrap gap-2">
-        <Link
-          href="/portfolio"
-          className="inline-flex items-center rounded border border-fg bg-fg px-3 py-2 text-xs font-medium text-ink hover:bg-fg/90"
-        >
-          Open Portfolio Center →
-        </Link>
-        <Link
-          href="/styleguide"
-          className="inline-flex items-center rounded border border-line-2 bg-panel-2 px-3 py-2 text-xs font-medium text-fg hover:border-fg-mute"
-        >
-          View styleguide
-        </Link>
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6">
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="eyebrow">Console</p>
+          <h1 className="mt-1 font-display text-xl font-bold text-fg">The desk</h1>
+        </div>
+        <div className="w-full sm:w-80">
+          <SymbolSearch basePath="/intelligence" placeholder="Analyze a symbol…" />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute">try</span>
+            {EXAMPLES.map((s) => (
+              <Link
+                key={s}
+                href={`/intelligence/${encodeURIComponent(s)}`}
+                className="rounded border border-line px-1.5 py-0.5 font-mono text-[0.625rem] text-fg-dim hover:border-line-2 hover:text-fg"
+              >
+                {s}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-4">
+        <PortfolioSnapshot />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <MachineCalls />
+          <LatestNews />
+        </div>
       </div>
+
+      <p className="mt-6 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute">
+        Simulated — not investment advice
+      </p>
     </div>
   );
 }
