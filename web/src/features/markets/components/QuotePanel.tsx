@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { IconKey } from "@/components/ui/icons";
 import { formatINR, formatCompactNumber, toNumber } from "@/lib/money";
-import { ApiError, isMissingKeyError } from "@/api/client";
+import { ApiError, isMissingKeyError, isPlanLimitError } from "@/api/client";
 import { useQuote } from "../hooks";
 
 const asOfFmt = new Intl.DateTimeFormat("en-IN", {
@@ -46,10 +46,16 @@ export function QuotePanel({ symbol }: { symbol: string }) {
           </div>
         </div>
       ) : q.isError ? (
-        isMissingKeyError(q.error) ? (
+        isPlanLimitError(q.error) ? (
+          <EmptyState icon={<IconKey />} title="Live quote not in plan" tone="warn">
+            The market-data provider doesn&rsquo;t return live quotes for this
+            exchange on the current plan — common for NSE/BSE symbols. Price history
+            and company details below still work.
+          </EmptyState>
+        ) : isMissingKeyError(q.error) ? (
           <EmptyState icon={<IconKey />} title="Live quotes need a key" tone="warn">
             Add a Finnhub key to the backend for live quotes. History and company
-            details may still load.
+            details still load.
           </EmptyState>
         ) : (
           <ErrorState detail={(q.error as ApiError).message} onRetry={() => q.refetch()} />

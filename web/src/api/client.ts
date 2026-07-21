@@ -18,10 +18,26 @@ export class ApiError extends Error {
   }
 }
 
-/** True when the failure is "the backend needs a Finnhub key / an upstream key". */
+/**
+ * True only when the backend market-data key is genuinely missing / not
+ * configured. Deliberately narrow: a provider 403 (see isPlanLimitError) means
+ * the key works but the plan doesn't cover that symbol — a different situation.
+ */
 export function isMissingKeyError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
-  return /api key|finnhub|not configured|provider|market data/i.test(error.message);
+  return /not configured|no api key|api key (is )?(missing|required|not set)|key is required/i.test(
+    error.message,
+  );
+}
+
+/**
+ * True when the upstream provider refused the request (HTTP 403). On Finnhub's
+ * free plan this is what NSE/BSE and other non-US exchanges return for live
+ * quotes — the key is valid, the exchange just isn't included.
+ */
+export function isPlanLimitError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return /\b403\b|forbidden/i.test(error.message);
 }
 
 type Json = Record<string, unknown> | unknown[];
