@@ -19,7 +19,9 @@ export type PortfolioPerformanceView = S["PortfolioPerformanceView"];
 export type QuoteView = S["QuoteView"];
 export type CompanyProfileView = S["CompanyProfileView"];
 export type HistoricalPriceSeriesView = S["HistoricalPriceSeriesView"];
+export type HistoricalPricePointView = S["HistoricalPricePointView"];
 export type InstrumentSearchResultsView = S["InstrumentSearchResultsView"];
+export type InstrumentSearchResultView = S["InstrumentSearchResultView"];
 
 // Intelligence
 export type CompanyScoreView = S["CompanyScoreView"];
