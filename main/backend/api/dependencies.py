@@ -69,6 +69,12 @@ from backend.modules.company.infrastructure.repositories import (
     SqlCompanyScoreRepository,
 )
 
+from backend.modules.prediction.application.services import PredictionService
+from backend.modules.prediction.infrastructure.predictors import LogisticBaselineModel
+from backend.modules.prediction.infrastructure.repositories import (
+    SqlPredictionRepository,
+)
+
 
 # The request-scoped database session dependency now lives in
 # backend.core.database (get_db_session) so the engine/session factory is
@@ -212,6 +218,24 @@ async def get_company_intelligence_service(
         market_data_service=await get_market_data_service(session),
         event_repository=SqlNewsEventRepository(session),
         score_repository=SqlCompanyScoreRepository(session),
+        commit=session.commit,
+    )
+
+
+async def get_prediction_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> PredictionService:
+    """
+    Provide the Phase 12 prediction service.
+
+    Uses the dependency-free logistic-regression baseline over price history
+    from the market data service. Swap in a trained model (sklearn/XGBoost/
+    deep) here behind the same PredictionModelContract to upgrade forecasts.
+    """
+    return PredictionService(
+        market_data_service=await get_market_data_service(session),
+        model=LogisticBaselineModel(),
+        repository=SqlPredictionRepository(session),
         commit=session.commit,
     )
 

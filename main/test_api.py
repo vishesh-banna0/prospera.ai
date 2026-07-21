@@ -211,6 +211,17 @@ async def run_offline_suite(t: ApiTester, r: Results) -> None:
     else:
         r.fail(f"company list failed ({status})")
 
+    # --- Predictions (offline: neutral forecast with no price history) ------
+    section("Predictions")
+    status, pred = await t.call("POST", "/api/v1/predictions/predict/AAPL?lookback_days=365")
+    if status == 200 and isinstance(pred, dict) and "direction" in pred:
+        r.ok(f"forecast AAPL: {pred.get('direction')} p_up={pred.get('probability_up')}")
+    else:
+        r.fail(f"prediction failed ({status}): {pred}")
+
+    status, _ = await t.call("GET", "/api/v1/predictions/")
+    r.ok("prediction list reachable") if status == 200 else r.fail(f"prediction list failed ({status})")
+
     # --- Cleanup -----------------------------------------------------------
     section("Cleanup")
     status, _ = await t.call("DELETE", f"/api/v1/environments/{env_id}")
