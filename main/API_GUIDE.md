@@ -437,6 +437,96 @@ GET /api/v1/news/warehouse/stats
 
 The warehouse supports filters for `category`, `symbol`, `sector`, `country`, and free-text `query`.
 
+## Intelligence & Analytics Endpoints (Phases 8–15)
+
+> **Currency:** every monetary value returned by the API is in **INR**. Foreign
+> prices (e.g. AAPL in USD) are converted to INR — historical bars at ingestion,
+> live quotes on read (see `GUIDE.md`, "How money and currency work").
+
+### Events (Phase 8)
+
+```bash
+POST /api/v1/events/extract     # turn stored news articles into structured events
+GET  /api/v1/events             # filter by type/symbol/sector/sentiment/importance
+GET  /api/v1/events/stats
+GET  /api/v1/events/company/{symbol}
+GET  /api/v1/events/{event_id}
+```
+
+### Research RAG (Phase 9)
+
+```bash
+POST /api/v1/research/documents  # ingest a document (parse -> chunk -> embed -> store)
+POST /api/v1/research/search     # semantic search: {"query": "...", "top_k": 5}
+GET  /api/v1/research/documents
+GET  /api/v1/research/stats
+```
+
+### Company intelligence (Phase 10)
+
+```bash
+POST /api/v1/company/analyze/{symbol}?lookback_days=180   # score growth/risk/sentiment (0-100)
+GET  /api/v1/company                                       # latest scorecards, ranked
+GET  /api/v1/company/{symbol}
+```
+
+### Predictions (Phase 12)
+
+```bash
+POST /api/v1/predictions/predict/{symbol}?lookback_days=365&horizon_days=1
+GET  /api/v1/predictions
+GET  /api/v1/predictions/{symbol}
+```
+
+### Signal fusion (Phase 13)
+
+```bash
+POST /api/v1/signals/fuse/{symbol}   # blends news + company + prediction -> Buy/Hold/Sell
+GET  /api/v1/signals
+GET  /api/v1/signals/{symbol}
+```
+
+### Reasoning (Phase 11)
+
+```bash
+POST /api/v1/reasoning/analyze/{symbol}   # explainable bullish/bearish/neutral + rationale
+GET  /api/v1/reasoning
+GET  /api/v1/reasoning/{symbol}
+```
+
+For the richest result, run `company/analyze`, `predictions/predict`, and
+`signals/fuse` for a symbol first — each stored result feeds the next stage.
+
+### Backtesting (Phase 15)
+
+```bash
+POST /api/v1/backtest/lumpsum
+{
+  "symbol": "AAPL",
+  "amount": 100000,
+  "start_at": "2023-01-01T00:00:00Z",
+  "end_at": "2024-12-31T00:00:00Z"
+}
+
+POST /api/v1/backtest/sip
+{
+  "symbol": "AAPL",
+  "monthly_amount": 5000,
+  "start_at": "2015-01-01T00:00:00Z",
+  "end_at": "2025-01-01T00:00:00Z"
+}
+```
+
+Both return return metrics (total return, CAGR, XIRR), risk metrics (annualized
+volatility, Sharpe, Sortino, max drawdown), and a sampled equity curve — in INR.
+
+### AI adapters (optional)
+
+The event extractor and reasoning engine use deterministic, offline defaults.
+Set `LLM_ENABLED=true` with `LLM_BASE_URL` pointing at a local OpenAI-compatible
+model (e.g. Ollama at `http://localhost:11434/v1`) to use an LLM instead; failures
+fall back to the deterministic path. No models are downloaded.
+
 ## Testing
 
 ### Automated Test Suite

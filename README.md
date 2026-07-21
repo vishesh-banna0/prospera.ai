@@ -2,6 +2,10 @@
 
 > Transforming information into intelligent decisions that create long-term prosperity.
 
+> **New to this project?** Start with **[GUIDE.md](GUIDE.md)** — a complete,
+> beginner-friendly walkthrough (run it in 5 minutes, every tool explained, a
+> guided code tour, and a glossary). No prior web-dev experience needed.
+
 ## Overview
 
 Prospera is an agentic financial intelligence platform designed to turn market data, news, research, and predictive models into explainable investment intelligence.
@@ -10,20 +14,31 @@ The platform starts with a strong backend foundation: a multi-environment market
 
 ## Current Scope
 
-The current focus is **V1 backend foundation**.
+The backend now spans **Phases 1–13 and 15** (foundation through the reasoning
+and backtesting layers). It runs **fully offline** on a local SQLite database
+with zero setup, and presents **all monetary values in INR**.
 
-V1 includes:
-- A market simulator engine (Phase 5) with isolated, persistent portfolio environments
-- A centralized market data service (Phase 6) for normalized historical prices, index data, company metadata, sectors, and industries
-- A news intelligence pipeline (Phase 7) with collection, deduplication, cleaning, classification, and warehouse storage for global, Indian, company, and sector news
-- Clean backend architecture for future expansion
+Implemented and tested:
+- **Market simulator** (Phase 5) — isolated, persistent paper-trading portfolios (INR).
+- **Market data service** (Phase 6) — quotes, historical prices, company profiles,
+  with **real-time currency conversion to INR**.
+- **News intelligence** (Phase 7) — collection, dedupe, cleaning, classification.
+- **Event extraction** (Phase 8) — structured events from news (rule-based + optional LLM).
+- **Research RAG** (Phase 9) — ingest + semantic search over documents.
+- **Company intelligence** (Phase 10) — 0–100 growth/risk/sentiment scorecards.
+- **Prediction models** (Phase 12) — a dependency-free logistic-regression baseline.
+- **Signal fusion** (Phase 13) — unified Buy/Hold/Sell from all signals.
+- **Reasoning engine** (Phase 11) — explainable bullish/bearish/neutral opinions
+  (template-based + optional LLM).
+- **Backtesting** (Phase 15) — lump-sum & SIP simulations with CAGR, XIRR,
+  volatility, Sharpe, Sortino, and max drawdown.
+- **Foundation:** offline runnability, structured logging, GitHub Actions CI, and
+  hosted-LLM adapters that reuse a local model (e.g. Ollama Llama) with no downloads.
 
-V1 does not yet include:
-- Structured event extraction from news (Phase 8)
-- Research RAG implementation
-- Prediction model training
-- RL agents
-- Full frontend implementation
+Not yet built (see [PLAN.md] — a local file — for the full roadmap):
+- AI portfolio manager (14), F&O module (16), advanced frontend (17),
+  multi-agent architecture (18), reinforcement learning (19),
+  evaluation & analytics (20), production deployment (21).
 
 ## Product Vision
 
@@ -363,13 +378,21 @@ Current status:
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1-3 | Planning, project setup, frontend foundation | Done |
-| 4 | Core database layer | Done |
+| 1-4 | Planning, setup, frontend foundation, core database | Done |
 | 5 | Market simulator | Done |
-| 6 | Market data pipeline | Done |
+| 6 | Market data pipeline (+ INR conversion) | Done |
 | 7 | News intelligence pipeline | Done |
-| 8 | Event extraction engine | Not started |
-| 9-21 | Research RAG through production deployment | Not started |
+| 8 | Event extraction engine (+ optional LLM) | Done |
+| 9 | Financial research RAG | Done |
+| 10 | Company intelligence engine | Done |
+| 11 | Financial reasoning engine (+ optional LLM) | Done |
+| 12 | Prediction models (baseline) | Done |
+| 13 | Signal fusion layer | Done |
+| 15 | Backtesting engine | Done |
+| 14, 16-21 | AI portfolio mgr, F&O, frontend, multi-agent, RL, eval, deploy | Not started |
+
+Cross-cutting done: offline runnability, structured logging, GitHub Actions CI,
+INR base currency, hosted-LLM adapters (local Ollama, no downloads).
 
 ## Mission
 
