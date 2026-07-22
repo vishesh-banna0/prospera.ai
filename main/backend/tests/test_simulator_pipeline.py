@@ -257,3 +257,62 @@ async def test_sell_without_holding_raises() -> None:
     finally:
         await session.close()
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_selling_entire_position_removes_holding_and_keeps_cash_correct() -> None:
+    engine, session = await _build_session()
+    try:
+        environment_repo = SqlEnvironmentRepository(session)
+        holding_repo = SqlHoldingRepository(session)
+        transaction_repo = SqlTransactionRepository(session)
+        market_data_service = StubMarketDataService({"AAPL": Decimal("100")})
+
+        create_environment = CreateEnvironmentUseCase(environment_repo)
+        add_cash = AddVirtualCashUseCase(environment_repo, transaction_repo)
+        buy_stock = BuyStockUseCase(
+            environment_repo, holding_repo, transaction_repo, market_data_service
+        )
+        sell_stock = SellStockUseCase(
+            environment_repo, holding_repo, transaction_repo, market_data_service
+        )
+        get_holdings = GetHoldingsUseCase(holding_repo, market_data_service)
+
+        environment = await create_environment.execute(
+            CreateEnvironmentInput(name="Full Exit", owner_type=OwnerType.USER)
+        )
+        env_id = environment.environment_id
+        await add_cash.execute(
+            CashAdjustmentInput(
+                environment_id=env_id,
+                amount=Money(amount=Decimal("10000"), currency="INR"),
+            )
+        )
+        await buy_stock.execute(
+            TradeOrderInput(
+                environment_id=env_id,
+                symbol="AAPL",
+                quantity=10,
+                order_type=TransactionType.BUY,
+            )
+        )
+        await sell_stock.execute(
+            TradeOrderInput(
+                environment_id=env_id,
+                symbol="AAPL",
+                quantity=10,
+                order_type=TransactionType.SELL,
+            )
+        )
+        await session.commit()
+
+        # Selling the whole position must remove the holding — not leave the shares
+        # behind while still crediting the proceeds (the regression this guards).
+        holdings = await get_holdings.execute(env_id)
+        assert holdings == []
+
+        environment = await environment_repo.get(env_id)
+        assert environment.cash_balance.amount == Decimal("10000.00")  # 10000 - 1000 + 1000
+    finally:
+        await session.close()
+        await engine.dispose()

@@ -66,6 +66,13 @@ class HoldingRepository(ABC):
     ) -> None:
         raise NotImplementedError
 
+    @abstractmethod
+    async def delete(
+        self,
+        holding_id: HoldingId,
+    ) -> None:
+        raise NotImplementedError
+
 
 class TransactionRepository(ABC):
     """

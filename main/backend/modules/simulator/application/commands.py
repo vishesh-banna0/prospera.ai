@@ -338,6 +338,11 @@ class SellStockUseCase:
             holding.quantity = ShareQuantity(value=new_quantity_value)
             holding.updated_at = datetime.now(UTC)
             await self._holding_repository.save(holding)
+        else:
+            # Position fully closed: remove the holding. Previously this branch was
+            # missing, so selling an entire position credited the proceeds while
+            # leaving the shares in place (cash and stock both retained).
+            await self._holding_repository.delete(holding.holding_id)
 
         transaction = Transaction(
             transaction_id=str(uuid.uuid4()),

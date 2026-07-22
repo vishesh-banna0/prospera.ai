@@ -181,6 +181,17 @@ class SqlHoldingRepository(HoldingRepository):
 
         await self._session.flush()
 
+    async def delete(
+        self,
+        holding_id: HoldingId,
+    ) -> None:
+        stmt = select(HoldingModel).where(HoldingModel.holding_id == holding_id)
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is not None:
+            await self._session.delete(model)
+            await self._session.flush()
+
     @staticmethod
     def _model_to_entity(model: HoldingModel) -> Holding:
         return Holding(
