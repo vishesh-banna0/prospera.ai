@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Create an account and return a signed token.
+         */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Verify credentials and return a signed token.
+         */
+        post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description Return the account for the presented bearer token.
+         */
+        get: operations["me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/": {
         parameters: {
             query?: never;
@@ -187,6 +247,50 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{environment_id}/sip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sip Plans
+         * @description List the recurring (SIP) plans in this portfolio.
+         */
+        get: operations["list_sip_plans_api_v1_portfolios__environment_id__sip_get"];
+        put?: never;
+        /**
+         * Create Sip Plan
+         * @description Create a recurring (SIP) investment plan for this portfolio.
+         */
+        post: operations["create_sip_plan_api_v1_portfolios__environment_id__sip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{environment_id}/sip/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel Sip Plan
+         * @description Cancel a recurring (SIP) plan. Executed installments stay in history.
+         */
+        delete: operations["cancel_sip_plan_api_v1_portfolios__environment_id__sip__plan_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -977,6 +1081,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AuthTokenView */
+        AuthTokenView: {
+            /** Token */
+            token: string;
+            user: components["schemas"]["UserView"];
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+        };
         /** BacktestResultView */
         BacktestResultView: {
             /** Symbol */
@@ -1089,6 +1204,22 @@ export interface components {
             /** Name */
             name: string;
             owner_type: components["schemas"]["OwnerType"];
+        };
+        /** CreateSipPlanInput */
+        CreateSipPlanInput: {
+            /** Environment Id */
+            environment_id: string;
+            /** Symbol */
+            symbol: string;
+            amount: components["schemas"]["Money"];
+            /** @default monthly */
+            frequency: components["schemas"]["SipFrequency"];
+            /** Start Date */
+            start_date?: string | null;
+            /** End Date */
+            end_date?: string | null;
+            /** Name */
+            name?: string | null;
         };
         /** DocumentView */
         DocumentView: {
@@ -1394,6 +1525,13 @@ export interface components {
             /** Results */
             results: components["schemas"]["InstrumentSearchResultView"][];
         };
+        /** LoginInput */
+        LoginInput: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
         /** LumpSumRequest */
         LumpSumRequest: {
             /** Symbol */
@@ -1631,6 +1769,13 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** RegisterInput */
+        RegisterInput: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
         /** RenameEnvironmentInput */
         RenameEnvironmentInput: {
             /** Environment Id */
@@ -1704,6 +1849,51 @@ export interface components {
              * @default
              */
             detail: string;
+        };
+        /**
+         * SipFrequency
+         * @description How often a systematic investment plan contributes.
+         * @enum {string}
+         */
+        SipFrequency: "weekly" | "monthly";
+        /** SipPlanView */
+        SipPlanView: {
+            /** Plan Id */
+            plan_id: string;
+            /** Environment Id */
+            environment_id: string;
+            /** Symbol */
+            symbol: string;
+            /** Symbol Name */
+            symbol_name: string | null;
+            /** Amount */
+            amount: string;
+            /** Frequency */
+            frequency: string;
+            /** Day Of Month */
+            day_of_month: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Next Run Date
+             * Format: date
+             */
+            next_run_date: string;
+            /** End Date */
+            end_date: string | null;
+            /** Status */
+            status: string;
+            /** Installments Run */
+            installments_run: number;
+            /** Installments Skipped */
+            installments_skipped: number;
+            /** Last Run At */
+            last_run_at: string | null;
+            /** Created At */
+            created_at: string | null;
         };
         /** SipRequest */
         SipRequest: {
@@ -1855,6 +2045,18 @@ export interface components {
              */
             executed_at: string;
         };
+        /** UserView */
+        UserView: {
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1873,6 +2075,92 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    register_api_v1_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokenView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokenView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserView"];
+                };
+            };
+        };
+    };
     create_environment_api_v1_environments__post: {
         parameters: {
             query?: never;
@@ -2235,6 +2523,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioPerformanceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sip_plans_api_v1_portfolios__environment_id__sip_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipPlanView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_sip_plan_api_v1_portfolios__environment_id__sip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSipPlanInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SipPlanView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_sip_plan_api_v1_portfolios__environment_id__sip__plan_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment_id: string;
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

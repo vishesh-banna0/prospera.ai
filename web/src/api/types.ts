@@ -9,11 +9,16 @@ import type { components } from "./schema";
 
 type S = components["schemas"];
 
+// Auth
+export type AuthTokenView = S["AuthTokenView"];
+export type UserView = S["UserView"];
+
 // Portfolio / simulator
 export type EnvironmentView = S["EnvironmentView"];
 export type HoldingView = S["HoldingView"];
 export type TransactionView = S["TransactionView"];
 export type PortfolioPerformanceView = S["PortfolioPerformanceView"];
+export type SipPlanView = S["SipPlanView"];
 
 // Market data
 export type QuoteView = S["QuoteView"];

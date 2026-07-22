@@ -4,7 +4,7 @@ import { Panel, Stat } from "@/components/ui/Panel";
 import { SignedNumber } from "@/components/ui/SignedNumber";
 import { StatSkeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/States";
-import { formatINR } from "@/lib/money";
+import { formatINRHeadline } from "@/lib/money";
 import { ApiError } from "@/api/client";
 import { usePerformance } from "../hooks";
 
@@ -26,11 +26,11 @@ export function PerformancePanel({ id }: { id: string }) {
         <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             label="Net liquidation"
-            value={formatINR(q.data.portfolio_value, 0)}
+            value={<HeadlineINR value={q.data.portfolio_value} />}
             className="lg:col-span-1"
           />
-          <Stat label="Cash" value={formatINR(q.data.cash_balance, 0)} />
-          <Stat label="Invested" value={formatINR(q.data.invested_amount, 0)} />
+          <Stat label="Cash" value={<HeadlineINR value={q.data.cash_balance} />} />
+          <Stat label="Invested" value={<HeadlineINR value={q.data.invested_amount} />} />
           <div className="flex flex-col gap-1">
             <span className="eyebrow">Unrealized P&amp;L</span>
             <span className="text-xl leading-none">
@@ -44,6 +44,14 @@ export function PerformancePanel({ id }: { id: string }) {
       ) : null}
     </Panel>
   );
+}
+
+/** A headline rupee figure that stays exact when it fits and falls back to the
+ *  compact ladder (₹9.99L cr) when it would overflow — the exact amount is kept
+ *  on hover so nothing is lost. */
+function HeadlineINR({ value }: { value: string | number | null | undefined }) {
+  const { text, title } = formatINRHeadline(value);
+  return <span title={title}>{text}</span>;
 }
 
 function Refresh({ onClick, busy }: { onClick: () => void; busy: boolean }) {

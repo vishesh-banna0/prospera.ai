@@ -12,7 +12,19 @@ import type { HoldingView } from "@/api/types";
 import { useHoldings } from "../hooks";
 
 const columns: Column<HoldingView>[] = [
-  { header: "Symbol", cell: (h) => <span className="text-fg">{h.symbol}</span> },
+  {
+    header: "Symbol",
+    cell: (h) => (
+      <span className="flex items-center gap-2">
+        <span className="text-fg">{h.symbol}</span>
+        {h.symbol.toUpperCase().endsWith(".MF") && (
+          <span className="rounded-sm bg-panel-2 px-1.5 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute">
+            Fund
+          </span>
+        )}
+      </span>
+    ),
+  },
   { header: "Qty", align: "right", cell: (h) => formatQty(h.quantity) },
   { header: "Avg cost", align: "right", cell: (h) => formatINR(h.average_cost) },
   { header: "Market value", align: "right", cell: (h) => formatINR(h.market_value ?? null) },

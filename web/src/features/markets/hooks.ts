@@ -31,6 +31,7 @@ export function useQuote(symbol: string) {
   return useQuery({
     queryKey: ["quote", symbol],
     queryFn: () => marketApi.quote(symbol),
+    enabled: symbol.trim() !== "",
     refetchInterval: 30_000,
     staleTime: 15_000,
   });

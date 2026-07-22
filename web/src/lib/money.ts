@@ -56,6 +56,21 @@ export function formatINR(
   return (decimals === 0 ? inrFullWhole : inrFull).format(n);
 }
 
+/**
+ * A headline rupee figure that never overflows its cell: the exact amount when
+ * it's short enough, otherwise the compact ladder (₹9.99L cr). Returns `title`
+ * with the exact value too, so callers can keep it available on hover. `maxChars`
+ * is the widest exact string a headline cell can show before it would collide.
+ */
+export function formatINRHeadline(
+  value: string | number | null | undefined,
+  maxChars = 14,
+): { text: string; title: string } {
+  const full = formatINR(value, 0);
+  if (full === "—" || full.length <= maxChars) return { text: full, title: full };
+  return { text: formatCompactINR(value), title: full };
+}
+
 const plainIN = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 4,

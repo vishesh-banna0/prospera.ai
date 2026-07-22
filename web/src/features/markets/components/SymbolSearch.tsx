@@ -5,18 +5,36 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { ApiError, isMissingKeyError } from "@/api/client";
+import type { InstrumentSearchResultView } from "@/api/types";
 import { useSymbolSearch } from "../hooks";
 
-/** Type-ahead symbol search. Selecting a result routes to `{basePath}/{symbol}`
- *  (Markets by default; the Intelligence page points it at itself). */
+/** The minimal shape a picker hands back. Real search results are a superset of
+ *  this, so they satisfy it directly; a raw typed ticker is synthesized to it. */
+export type SymbolPick = Pick<
+  InstrumentSearchResultView,
+  "symbol" | "instrument_name" | "asset_type"
+>;
+
+/** Type-ahead search over symbol AND company name.
+ *
+ *  Two modes:
+ *  - Default (navigate): selecting a result routes to `{basePath}/{symbol}`
+ *    (Markets by default; the Intelligence page points it at itself).
+ *  - Picker (`onSelect` given): selecting a result calls `onSelect(pick)` and
+ *    fills the box with the chosen symbol instead of navigating — used by the
+ *    trade desk and the SIP form. In this mode, pressing Enter with no matching
+ *    result accepts the raw typed ticker, so a known symbol still works even if
+ *    search returns nothing. */
 export function SymbolSearch({
   autoFocus,
   placeholder = "Search symbol or company…",
   basePath = "/markets",
+  onSelect,
 }: {
   autoFocus?: boolean;
   placeholder?: string;
   basePath?: string;
+  onSelect?: (pick: SymbolPick) => void;
 }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
@@ -30,10 +48,16 @@ export function SymbolSearch({
   const results = q.data?.results ?? [];
   const showPanel = open && term.trim().length >= 1;
 
-  function choose(symbol: string) {
+  function pick(result: SymbolPick) {
+    if (onSelect) {
+      onSelect({ ...result, symbol: result.symbol.toUpperCase() });
+      setTerm(result.symbol.toUpperCase());
+      setOpen(false);
+      return;
+    }
     setOpen(false);
     setTerm("");
-    router.push(`${basePath}/${encodeURIComponent(symbol)}`);
+    router.push(`${basePath}/${encodeURIComponent(result.symbol)}`);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -45,10 +69,15 @@ export function SymbolSearch({
       e.preventDefault();
       setActive((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
-      const pick = results[active];
-      if (pick) {
+      const chosen = results[active];
+      if (chosen) {
         e.preventDefault();
-        choose(pick.symbol);
+        pick(chosen);
+      } else if (onSelect && !q.isLoading && term.trim()) {
+        // No match, but the user typed something they mean literally (e.g. an
+        // exact ticker search doesn't know). Accept it as a raw symbol.
+        e.preventDefault();
+        pick({ symbol: term.trim(), instrument_name: term.trim(), asset_type: "stock" });
       }
     } else if (e.key === "Escape") {
       setOpen(false);
@@ -105,7 +134,7 @@ export function SymbolSearch({
                 <li key={`${r.symbol}-${i}`} role="option" aria-selected={i === active}>
                   <button
                     type="button"
-                    onClick={() => choose(r.symbol)}
+                    onClick={() => pick(r)}
                     onMouseEnter={() => setActive(i)}
                     className={cn(
                       "flex w-full items-center gap-3 px-3 py-2 text-left",
@@ -116,10 +145,16 @@ export function SymbolSearch({
                     <span className="min-w-0 flex-1 truncate text-xs text-fg-dim">
                       {r.instrument_name}
                     </span>
-                    {r.sector && (
-                      <span className="hidden shrink-0 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute sm:inline">
-                        {r.sector}
+                    {r.asset_type === "mutual_fund" ? (
+                      <span className="shrink-0 rounded-sm bg-panel-2 px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute">
+                        Fund
                       </span>
+                    ) : (
+                      r.sector && (
+                        <span className="hidden shrink-0 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute sm:inline">
+                          {r.sector}
+                        </span>
+                      )
                     )}
                   </button>
                 </li>

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Archivo, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { AppShell } from "@/components/shell/AppShell";
+import { AuthProvider } from "@/features/auth/AuthProvider";
+import { AuthBoundary } from "@/features/auth/AuthBoundary";
 
 // Three roles — see DESIGN.md §2. Archivo is a sturdy grotesque used only for
 // display, set in tracked uppercase for the engraved-panel-label feel.
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
         <Providers>
-          <AppShell>{children}</AppShell>
+          <AuthProvider>
+            <AuthBoundary>{children}</AuthBoundary>
+          </AuthProvider>
         </Providers>
       </body>
     </html>

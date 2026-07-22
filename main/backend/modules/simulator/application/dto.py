@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
+from backend.modules.simulator.domain.sip import SipFrequency
 from backend.shared.types import (
     EnvironmentId,
     Money,
@@ -42,6 +44,17 @@ class TradeOrderInput:
     symbol: Symbol
     quantity: float
     order_type: TransactionType
+
+
+@dataclass(frozen=True, slots=True)
+class CreateSipPlanInput:
+    environment_id: EnvironmentId
+    symbol: Symbol
+    amount: Money
+    frequency: SipFrequency = SipFrequency.MONTHLY
+    start_date: date | None = None
+    end_date: date | None = None
+    name: str | None = None
 
 
 # ============================================================
@@ -109,6 +122,39 @@ class PortfolioView:
     holdings: tuple[HoldingView, ...]
 
     performance: PortfolioPerformanceView
+
+
+@dataclass(frozen=True, slots=True)
+class SipPlanView:
+    plan_id: str
+
+    environment_id: EnvironmentId
+
+    symbol: Symbol
+
+    symbol_name: str | None
+
+    amount: str
+
+    frequency: str
+
+    day_of_month: int
+
+    start_date: date
+
+    next_run_date: date
+
+    end_date: date | None
+
+    status: str
+
+    installments_run: int
+
+    installments_skipped: int
+
+    last_run_at: Timestamp | None
+
+    created_at: Timestamp | None
 # Purpose:
 # Defines application-layer request and response contracts for simulator workflows.
 #

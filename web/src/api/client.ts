@@ -6,6 +6,8 @@
  * never replace them with a generic "Something went wrong."
  */
 
+import { getToken } from "@/features/auth/token";
+
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
@@ -44,12 +46,14 @@ export function isPlanLimitError(error: unknown): boolean {
 type Json = unknown;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken();
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
     });

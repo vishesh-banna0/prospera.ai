@@ -815,15 +815,20 @@ class SqlMarketDataRepository(
         query: str,
     ) -> list[Instrument]:
         query_text = f"%{query.strip()}%"
+        # Mutual funds live in this table only to satisfy the price/profile foreign
+        # keys; they are searched through the dedicated AMFI/mfapi source. Excluding
+        # them here keeps a cached fund from shadowing live equity search results
+        # (e.g. searching "HDFC" must still reach HDFC Bank, not only HDFC funds).
         stmt = (
             select(MarketInstrumentModel)
             .where(
+                MarketInstrumentModel.asset_type != AssetType.MUTUAL_FUND.value,
                 or_(
                     MarketInstrumentModel.symbol.ilike(query_text),
                     MarketInstrumentModel.instrument_name.ilike(query_text),
                     MarketInstrumentModel.sector.ilike(query_text),
                     MarketInstrumentModel.industry.ilike(query_text),
-                )
+                ),
             )
             .order_by(MarketInstrumentModel.symbol.asc())
             .limit(50)

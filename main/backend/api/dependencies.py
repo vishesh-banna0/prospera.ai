@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db_session
 from backend.core.exceptions import ConfigurationError
 from backend.core.config import get_settings
+
+from backend.modules.users.application.dto import UserView
+from backend.modules.users.application.services import AuthService
+from backend.modules.users.infrastructure.repositories import SqlUserRepository
+from backend.modules.users.infrastructure.security import decode_token
 
 from backend.modules.simulator.application.services import SimulatorService
 
@@ -26,9 +32,17 @@ from backend.modules.simulator.application.queries import (
     GetPortfolioPerformanceUseCase,
 )
 
+from backend.modules.simulator.application.sip import (
+    CancelSipPlanUseCase,
+    CreateSipPlanUseCase,
+    ExecuteDueSipInstallmentsUseCase,
+    ListSipPlansUseCase,
+)
+
 from backend.modules.simulator.infrastructure.repositories import (
     SqlEnvironmentRepository,
     SqlHoldingRepository,
+    SqlSipPlanRepository,
     SqlTransactionRepository,
 )
 
@@ -47,6 +61,14 @@ from backend.modules.market_data.infrastructure.repositories import (
     SqlMarketDataRepository,
     YFinanceHistoricalDataProvider,
     YFinanceQuoteRepository,
+)
+from backend.modules.market_data.infrastructure.mfapi import (
+    FundAwareDataProvider,
+    FundAwareQuoteRepository,
+    MfApiDataProvider,
+    MfApiQuoteRepository,
+    MfApiSymbolSearchRepository,
+    MultiSourceSymbolSearchRepository,
 )
 from backend.modules.news.application.services import NewsIntelligenceService
 from backend.modules.news.infrastructure.repositories import FinnhubNewsProvider
@@ -99,6 +121,42 @@ from backend.modules.backtesting.application.services import BacktestService
 # shared across the app instead of being re-created here.
 
 
+_bearer_scheme = HTTPBearer(auto_error=True)
+
+
+async def get_auth_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> AuthService:
+    """Provide the authentication service (register / login / lookup)."""
+    settings = get_settings()
+    return AuthService(
+        user_repository=SqlUserRepository(session),
+        secret_key=settings.auth_secret_key,
+        token_ttl_hours=settings.auth_token_ttl_hours,
+        commit=session.commit,
+    )
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    session: AsyncSession = Depends(get_db_session),
+) -> UserView:
+    """Resolve the account named by a valid bearer token, or raise 401."""
+    settings = get_settings()
+    payload = decode_token(credentials.credentials, settings.auth_secret_key)
+    if payload is None or "sub" not in payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    try:
+        service = AuthService(
+            user_repository=SqlUserRepository(session),
+            secret_key=settings.auth_secret_key,
+            token_ttl_hours=settings.auth_token_ttl_hours,
+        )
+        return await service.get_user(str(payload["sub"]))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+
+
 async def get_market_data_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> MarketDataService:
@@ -119,6 +177,11 @@ async def get_market_data_service(
         base_currency=settings.base_currency,
     )
     yfinance_provider = YFinanceHistoricalDataProvider()
+    # Indian mutual funds (symbols like "120503.MF") are priced off mfapi.in's
+    # free NAV data. The fund-aware wrappers below route ".MF" symbols there and
+    # everything else to the existing equity adapters, so funds become tradable,
+    # searchable, and backtestable through the same market-data service.
+    mfapi_provider = MfApiDataProvider()
 
     # Static (offline) FX rates from config; used directly when FX_LIVE is off
     # and as the fallback for the live yfinance provider otherwise.
@@ -142,20 +205,33 @@ async def get_market_data_service(
 
     return MarketDataService(
         # Finnhub for US live quotes; yfinance covers NSE/BSE (Finnhub's free
-        # plan returns 403 there) and works even with no Finnhub key configured.
-        quote_repository=FallbackQuoteRepository(
-            primary=FinnhubQuoteRepository(client),
-            fallback=YFinanceQuoteRepository(),
+        # plan returns 403 there) and works even with no Finnhub key configured;
+        # mutual-fund symbols (".MF") price off mfapi.in NAV.
+        quote_repository=FundAwareQuoteRepository(
+            equity=FallbackQuoteRepository(
+                primary=FinnhubQuoteRepository(client),
+                fallback=YFinanceQuoteRepository(),
+            ),
+            fund=MfApiQuoteRepository(),
         ),
         historical_price_repository=market_data_repository,
-        symbol_search_repository=CompositeSymbolSearchRepository(
-            storage_repository=market_data_repository,
-            provider_repository=FinnhubSymbolSearchRepository(client),
+        symbol_search_repository=MultiSourceSymbolSearchRepository(
+            equity=CompositeSymbolSearchRepository(
+                storage_repository=market_data_repository,
+                provider_repository=FinnhubSymbolSearchRepository(client),
+            ),
+            fund=MfApiSymbolSearchRepository(),
         ),
         market_metadata_repository=FinnhubMarketMetadataRepository(client),
-        historical_price_provider=yfinance_provider,
+        historical_price_provider=FundAwareDataProvider(
+            equity=yfinance_provider,
+            fund=mfapi_provider,
+        ),
         company_profile_repository=market_data_repository,
-        company_profile_provider=yfinance_provider,
+        company_profile_provider=FundAwareDataProvider(
+            equity=yfinance_provider,
+            fund=mfapi_provider,
+        ),
         fx_rate_provider=fx_provider,
         base_currency=settings.base_currency,
         commit=session.commit,
@@ -330,6 +406,7 @@ async def get_simulator_service(
     environment_repo = SqlEnvironmentRepository(session)
     holding_repo = SqlHoldingRepository(session)
     transaction_repo = SqlTransactionRepository(session)
+    sip_plan_repo = SqlSipPlanRepository(session)
     # portfolio_snapshots are reserved for future backtesting/RL use and are
     # not yet written by any use case, so no snapshot repository is wired here.
 
@@ -390,6 +467,28 @@ async def get_simulator_service(
         market_data_service=market_data_service,
     )
 
+    create_sip_plan = CreateSipPlanUseCase(
+        sip_plan_repository=sip_plan_repo,
+        environment_repository=environment_repo,
+        market_data_service=market_data_service,
+    )
+
+    list_sip_plans = ListSipPlansUseCase(
+        sip_plan_repository=sip_plan_repo,
+    )
+
+    cancel_sip_plan = CancelSipPlanUseCase(
+        sip_plan_repository=sip_plan_repo,
+    )
+
+    execute_due_sip = ExecuteDueSipInstallmentsUseCase(
+        sip_plan_repository=sip_plan_repo,
+        environment_repository=environment_repo,
+        holding_repository=holding_repo,
+        transaction_repository=transaction_repo,
+        market_data_service=market_data_service,
+    )
+
     return SimulatorService(
         create_environment=create_environment,
         rename_environment=rename_environment,
@@ -402,5 +501,9 @@ async def get_simulator_service(
         get_holdings=get_holdings,
         get_transactions=get_transactions,
         get_portfolio_performance=get_portfolio_performance,
+        create_sip_plan=create_sip_plan,
+        list_sip_plans=list_sip_plans,
+        cancel_sip_plan=cancel_sip_plan,
+        execute_due_sip=execute_due_sip,
         commit=session.commit,
     )

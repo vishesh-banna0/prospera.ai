@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/States";
 import { IconGaugeEmpty } from "@/components/ui/icons";
+import { usePerformance } from "@/features/portfolio/hooks";
 import { usePortfolioRegistry, type PortfolioRef } from "@/features/portfolio/registry";
 import { PortfolioBar } from "@/features/portfolio/components/PortfolioBar";
 import { PortfolioHeader } from "@/features/portfolio/components/PortfolioHeader";
@@ -12,6 +14,7 @@ import { HoldingsPanel } from "@/features/portfolio/components/HoldingsPanel";
 import { TransactionsPanel } from "@/features/portfolio/components/TransactionsPanel";
 import { CashDesk } from "@/features/portfolio/components/CashDesk";
 import { TradeDesk } from "@/features/portfolio/components/TradeDesk";
+import { SipPanel } from "@/features/portfolio/components/SipPanel";
 import { CreatePortfolioForm } from "@/features/portfolio/components/CreatePortfolioForm";
 
 export default function PortfolioPage() {
@@ -95,6 +98,21 @@ function Dashboard({
   onRenamed: (name: string) => void;
   onDeleted: () => void;
 }) {
+  const qc = useQueryClient();
+  const performance = usePerformance(id);
+
+  // Reading performance runs any due SIP installments on the backend (lazy
+  // catch-up). Once it settles, refresh the panels those installments could have
+  // changed so holdings, transactions, and the plan list stay in step — the same
+  // idea as refreshing after a trade, but the trade here is a server-side effect.
+  const settledAt = performance.dataUpdatedAt;
+  useEffect(() => {
+    if (!settledAt) return;
+    qc.invalidateQueries({ queryKey: ["holdings", id] });
+    qc.invalidateQueries({ queryKey: ["transactions", id] });
+    qc.invalidateQueries({ queryKey: ["sip-plans", id] });
+  }, [settledAt, id, qc]);
+
   return (
     <div className="flex flex-col gap-4">
       <PortfolioHeader id={id} fallbackName={fallbackName} onRenamed={onRenamed} onDeleted={onDeleted} />
@@ -103,6 +121,7 @@ function Dashboard({
         <CashDesk id={id} />
         <TradeDesk id={id} />
       </div>
+      <SipPanel id={id} />
       <HoldingsPanel id={id} />
       <TransactionsPanel id={id} />
     </div>

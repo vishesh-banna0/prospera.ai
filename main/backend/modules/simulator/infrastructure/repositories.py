@@ -13,13 +13,16 @@ from backend.modules.simulator.domain.repositories import (
     EnvironmentRepository,
     HoldingRepository,
     PortfolioSnapshotRepository,
+    SipPlanRepository,
     TransactionRepository,
 )
+from backend.modules.simulator.domain.sip import SipFrequency, SipPlan, SipStatus
 from backend.modules.simulator.domain.value_objects import ShareQuantity
 from backend.modules.simulator.infrastructure.models import (
     EnvironmentModel,
     HoldingModel,
     PortfolioSnapshotModel,
+    SipPlanModel,
     TransactionModel,
 )
 from backend.shared.types import (
@@ -28,6 +31,7 @@ from backend.shared.types import (
     HoldingId,
     Money,
     OwnerType,
+    Symbol,
     TransactionId,
     TransactionType,
 )
@@ -341,6 +345,121 @@ class SqlPortfolioSnapshotRepository(PortfolioSnapshotRepository):
             portfolio_value=Money(amount=model.portfolio_value, currency=currency),
             total_value=Money(amount=model.total_value, currency=currency),
             unrealized_pnl=Money(amount=model.unrealized_pnl, currency=currency),
+        )
+
+
+class SqlSipPlanRepository(SipPlanRepository):
+    """SQL-based implementation of the SIP plan repository."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(
+        self,
+        plan_id: str,
+    ) -> SipPlan | None:
+        model = await self._get_model(plan_id)
+        if model is None:
+            return None
+        return self._model_to_entity(model)
+
+    async def list_by_environment(
+        self,
+        environment_id: EnvironmentId,
+    ) -> list[SipPlan]:
+        stmt = (
+            select(SipPlanModel)
+            .where(SipPlanModel.environment_id == environment_id)
+            .order_by(SipPlanModel.created_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        return [self._model_to_entity(model) for model in result.scalars().all()]
+
+    async def save(
+        self,
+        plan: SipPlan,
+    ) -> None:
+        model = await self._get_model(plan.plan_id)
+
+        if model is None:
+            self._session.add(
+                SipPlanModel(
+                    plan_id=plan.plan_id,
+                    environment_id=plan.environment_id,
+                    symbol=str(plan.symbol),
+                    symbol_name=plan.symbol_name,
+                    amount=plan.amount.amount,
+                    currency=str(plan.amount.currency),
+                    frequency=plan.frequency.value,
+                    day_of_month=plan.day_of_month,
+                    start_date=plan.start_date,
+                    end_date=plan.end_date,
+                    next_run_date=plan.next_run_date,
+                    status=plan.status.value,
+                    installments_run=plan.installments_run,
+                    installments_skipped=plan.installments_skipped,
+                    created_at=plan.created_at,
+                    updated_at=plan.updated_at,
+                    last_run_at=plan.last_run_at,
+                )
+            )
+        else:
+            model.symbol = str(plan.symbol)
+            model.symbol_name = plan.symbol_name
+            model.amount = plan.amount.amount
+            model.currency = str(plan.amount.currency)
+            model.frequency = plan.frequency.value
+            model.day_of_month = plan.day_of_month
+            model.start_date = plan.start_date
+            model.end_date = plan.end_date
+            model.next_run_date = plan.next_run_date
+            model.status = plan.status.value
+            model.installments_run = plan.installments_run
+            model.installments_skipped = plan.installments_skipped
+            model.updated_at = plan.updated_at
+            model.last_run_at = plan.last_run_at
+
+        await self._session.flush()
+
+    async def delete(
+        self,
+        plan_id: str,
+    ) -> None:
+        model = await self._get_model(plan_id)
+        if model is not None:
+            await self._session.delete(model)
+            await self._session.flush()
+
+    async def _get_model(
+        self,
+        plan_id: str,
+    ) -> SipPlanModel | None:
+        stmt = select(SipPlanModel).where(SipPlanModel.plan_id == plan_id)
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    def _model_to_entity(model: SipPlanModel) -> SipPlan:
+        return SipPlan(
+            plan_id=model.plan_id,
+            environment_id=EnvironmentId(model.environment_id),
+            symbol=Symbol(model.symbol),
+            amount=Money(
+                amount=model.amount,
+                currency=CurrencyCode(model.currency),
+            ),
+            frequency=SipFrequency(model.frequency),
+            day_of_month=model.day_of_month,
+            start_date=model.start_date,
+            next_run_date=model.next_run_date,
+            status=SipStatus(model.status),
+            end_date=model.end_date,
+            symbol_name=model.symbol_name,
+            installments_run=model.installments_run,
+            installments_skipped=model.installments_skipped,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+            last_run_at=model.last_run_at,
         )
 
 

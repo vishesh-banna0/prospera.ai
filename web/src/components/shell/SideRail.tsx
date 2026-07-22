@@ -66,7 +66,7 @@ export function SideRail() {
       ))}
 
       <p className="mt-auto px-2 font-mono text-[0.625rem] leading-relaxed text-fg-mute">
-        Single local user. No account — auth arrives later.
+        Signed in. Portfolios are shared on this backend, not per account yet.
       </p>
     </nav>
   );

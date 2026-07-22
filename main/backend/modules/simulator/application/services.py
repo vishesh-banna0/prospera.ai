@@ -15,8 +15,10 @@ from backend.modules.simulator.application.commands import (
 from backend.modules.simulator.application.dto import (
     CashAdjustmentInput,
     CreateEnvironmentInput,
+    CreateSipPlanInput,
     EnvironmentView,
     RenameEnvironmentInput,
+    SipPlanView,
     TradeOrderInput,
 )
 from backend.modules.simulator.application.queries import (
@@ -24,6 +26,12 @@ from backend.modules.simulator.application.queries import (
     GetHoldingsUseCase,
     GetPortfolioPerformanceUseCase,
     GetTransactionsUseCase,
+)
+from backend.modules.simulator.application.sip import (
+    CancelSipPlanUseCase,
+    CreateSipPlanUseCase,
+    ExecuteDueSipInstallmentsUseCase,
+    ListSipPlansUseCase,
 )
 from backend.shared.types import EnvironmentId
 
@@ -52,6 +60,10 @@ class SimulatorService:
         get_holdings: GetHoldingsUseCase,
         get_transactions: GetTransactionsUseCase,
         get_portfolio_performance: GetPortfolioPerformanceUseCase,
+        create_sip_plan: CreateSipPlanUseCase | None = None,
+        list_sip_plans: ListSipPlansUseCase | None = None,
+        cancel_sip_plan: CancelSipPlanUseCase | None = None,
+        execute_due_sip: ExecuteDueSipInstallmentsUseCase | None = None,
         commit: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._commit = commit
@@ -69,6 +81,11 @@ class SimulatorService:
         self._get_holdings = get_holdings
         self._get_transactions = get_transactions
         self._get_portfolio_performance = get_portfolio_performance
+
+        self._create_sip_plan = create_sip_plan
+        self._list_sip_plans = list_sip_plans
+        self._cancel_sip_plan = cancel_sip_plan
+        self._execute_due_sip = execute_due_sip
 
     async def create_environment(
         self,
@@ -150,9 +167,54 @@ class SimulatorService:
         self,
         environment_id: EnvironmentId,
     ):
+        # Any SIP installments that have come due are executed here (lazy
+        # catch-up) so a portfolio read is always current before we value it.
+        await self._run_due_sip(environment_id)
         return await self._get_portfolio_performance.execute(
             environment_id,
         )
+
+    async def _run_due_sip(
+        self,
+        environment_id: EnvironmentId,
+    ) -> None:
+        if self._execute_due_sip is None:
+            return
+        executed = await self._execute_due_sip.execute(environment_id)
+        if executed:
+            await self._commit_changes()
+
+    async def create_sip_plan(
+        self,
+        request: CreateSipPlanInput,
+    ) -> SipPlanView:
+        if self._create_sip_plan is None:
+            raise RuntimeError("SIP plans are not configured.")
+        view = await self._create_sip_plan.execute(request)
+        await self._commit_changes()
+        return view
+
+    async def list_sip_plans(
+        self,
+        environment_id: EnvironmentId,
+    ) -> list[SipPlanView]:
+        if self._list_sip_plans is None:
+            return []
+        # A pure read: due installments are executed only in
+        # get_portfolio_performance, so the catch-up runs in exactly one place and
+        # can't race itself when the page loads both in parallel. The performance
+        # read (and the refresh after any create/cancel) keeps this list current.
+        return await self._list_sip_plans.execute(environment_id)
+
+    async def cancel_sip_plan(
+        self,
+        environment_id: EnvironmentId,
+        plan_id: str,
+    ) -> None:
+        if self._cancel_sip_plan is None:
+            raise RuntimeError("SIP plans are not configured.")
+        await self._cancel_sip_plan.execute(environment_id, plan_id)
+        await self._commit_changes()
 
 # Purpose:
 # Defines higher-level simulator application services that group related use cases.

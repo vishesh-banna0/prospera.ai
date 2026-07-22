@@ -101,6 +101,20 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="llama3.1", alias="LLM_MODEL")
     llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS")
 
+    # --- Authentication ------------------------------------------------------
+    # Simple username/password auth. Passwords are stored as PBKDF2-SHA256 hashes;
+    # login issues an HMAC-signed token valid for auth_token_ttl_hours. The secret
+    # ships with a dev default so the app runs out of the box — set a strong
+    # AUTH_SECRET_KEY in .env for anything beyond local use.
+    auth_secret_key: str = Field(
+        default="dev-insecure-change-me",
+        alias="AUTH_SECRET_KEY",
+    )
+    auth_token_ttl_hours: float = Field(
+        default=168.0,  # 7 days
+        alias="AUTH_TOKEN_TTL_HOURS",
+    )
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     # shows more detailed logs in development and less verbose logs in production,
     # improving debugging and performance.

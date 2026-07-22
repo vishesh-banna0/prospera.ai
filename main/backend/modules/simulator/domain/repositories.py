@@ -7,6 +7,7 @@ from backend.modules.simulator.domain.entities import Holding
 from backend.modules.simulator.domain.entities import PortfolioSnapshot
 from backend.modules.simulator.domain.entities import SimulatorEnvironment
 from backend.modules.simulator.domain.entities import Transaction
+from backend.modules.simulator.domain.sip import SipPlan
 from backend.shared.types import EnvironmentId
 from backend.shared.types import HoldingId
 from backend.shared.types import TransactionId
@@ -115,6 +116,40 @@ class PortfolioSnapshotRepository(ABC):
     async def save(
         self,
         snapshot: PortfolioSnapshot,
+    ) -> None:
+        raise NotImplementedError
+
+
+class SipPlanRepository(ABC):
+    """
+    Repository contract for systematic investment plans (SIPs).
+    """
+
+    @abstractmethod
+    async def get(
+        self,
+        plan_id: str,
+    ) -> SipPlan | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_by_environment(
+        self,
+        environment_id: EnvironmentId,
+    ) -> list[SipPlan]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def save(
+        self,
+        plan: SipPlan,
+    ) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete(
+        self,
+        plan_id: str,
     ) -> None:
         raise NotImplementedError
 

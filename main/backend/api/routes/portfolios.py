@@ -6,7 +6,9 @@ from dataclasses import replace
 from backend.api.dependencies import get_simulator_service
 from backend.modules.simulator.application.dto import (
     CashAdjustmentInput,
+    CreateSipPlanInput,
     HoldingView,
+    SipPlanView,
     TradeOrderInput,
     TransactionView,
     PortfolioPerformanceView,
@@ -112,6 +114,46 @@ async def get_performance(
     try:
         performance = await service.get_portfolio_performance(environment_id)
         return performance
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{environment_id}/sip", response_model=SipPlanView)
+async def create_sip_plan(
+    environment_id: EnvironmentId,
+    request: CreateSipPlanInput,
+    service: SimulatorService = Depends(get_simulator_service),
+) -> SipPlanView:
+    """Create a recurring (SIP) investment plan for this portfolio."""
+    try:
+        request = replace(request, environment_id=environment_id)
+        return await service.create_sip_plan(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{environment_id}/sip", response_model=list[SipPlanView])
+async def list_sip_plans(
+    environment_id: EnvironmentId,
+    service: SimulatorService = Depends(get_simulator_service),
+) -> list[SipPlanView]:
+    """List the recurring (SIP) plans in this portfolio."""
+    try:
+        return await service.list_sip_plans(environment_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{environment_id}/sip/{plan_id}")
+async def cancel_sip_plan(
+    environment_id: EnvironmentId,
+    plan_id: str,
+    service: SimulatorService = Depends(get_simulator_service),
+) -> dict:
+    """Cancel a recurring (SIP) plan. Executed installments stay in history."""
+    try:
+        await service.cancel_sip_plan(environment_id, plan_id)
+        return {"status": "cancelled", "plan_id": plan_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

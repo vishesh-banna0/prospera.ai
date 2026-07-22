@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from backend.api.routes import (
+    auth,
     environments,
     portfolios,
     market_data,
@@ -22,6 +23,7 @@ def create_api_router() -> APIRouter:
     api_router = APIRouter(prefix="/api/v1")
 
     # Register route groups
+    api_router.include_router(auth.router)
     api_router.include_router(environments.router)
     api_router.include_router(portfolios.router)
     api_router.include_router(market_data.router)

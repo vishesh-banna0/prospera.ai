@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useHealth } from "@/lib/useHealth";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { cn } from "@/lib/cn";
 
 /**
@@ -31,8 +33,36 @@ export function StatusStrip() {
       <div className="ml-auto flex items-center gap-3">
         <span className="font-mono text-2xs text-fg-dim tnum">₹ INR</span>
         <AdvicePlate />
+        <Account />
       </div>
     </header>
+  );
+}
+
+function Account() {
+  const { username, signOut } = useAuth();
+  const router = useRouter();
+
+  function handleSignOut() {
+    signOut();
+    router.replace("/login");
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {username && (
+        <span className="hidden font-mono text-2xs text-fg-dim sm:inline" title="Signed in">
+          {username}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="rounded-sm border border-line-2 px-2 py-1 font-mono text-[0.625rem] uppercase tracking-wider text-fg-mute hover:border-fg-mute hover:text-fg"
+      >
+        Sign out
+      </button>
+    </div>
   );
 }
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean
+from sqlalchemy import Date
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
 from sqlalchemy import Numeric
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped
@@ -71,6 +73,12 @@ class EnvironmentModel(Base):
 
     transactions = relationship(
         "TransactionModel",
+        back_populates="environment",
+        cascade="all, delete-orphan",
+    )
+
+    sip_plans = relationship(
+        "SipPlanModel",
         back_populates="environment",
         cascade="all, delete-orphan",
     )
@@ -184,6 +192,108 @@ class TransactionModel(Base):
     environment = relationship(
         "EnvironmentModel",
         back_populates="transactions",
+    )
+
+
+class SipPlanModel(Base):
+    __tablename__ = "sip_plans"
+
+    plan_id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+    )
+
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("environments.environment_id"),
+        nullable=False,
+        index=True,
+    )
+
+    symbol: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+    )
+
+    symbol_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2),
+        nullable=False,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        default="INR",
+    )
+
+    frequency: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="monthly",
+    )
+
+    day_of_month: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
+    start_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+    )
+
+    end_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+    )
+
+    next_run_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="active",
+    )
+
+    installments_run: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    installments_skipped: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_run_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    environment = relationship(
+        "EnvironmentModel",
+        back_populates="sip_plans",
     )
 
 

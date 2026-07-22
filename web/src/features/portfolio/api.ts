@@ -3,6 +3,7 @@ import type {
   EnvironmentView,
   HoldingView,
   PortfolioPerformanceView,
+  SipPlanView,
   TransactionView,
 } from "@/api/types";
 
@@ -13,6 +14,7 @@ import type {
  */
 
 export type OrderSide = "buy" | "sell";
+export type SipFrequency = "weekly" | "monthly";
 
 interface OrderAck {
   status: string;
@@ -22,6 +24,16 @@ interface OrderAck {
 interface CashAck {
   status: string;
   amount: string;
+}
+
+/** What the SIP create form collects (the backend fills currency = INR and the
+ *  environment id from the path). */
+export interface NewSipPlan {
+  symbol: string;
+  name?: string;
+  amount: number;
+  frequency: SipFrequency;
+  startDateISO: string; // "YYYY-MM-DD"
 }
 
 export const portfolioApi = {
@@ -59,4 +71,19 @@ export const portfolioApi = {
       quantity,
       order_type: side,
     }),
+
+  listSipPlans: (id: string) => api.get<SipPlanView[]>(`/api/v1/portfolios/${id}/sip`),
+
+  createSipPlan: (id: string, plan: NewSipPlan) =>
+    api.post<SipPlanView>(`/api/v1/portfolios/${id}/sip`, {
+      environment_id: id,
+      symbol: plan.symbol.trim().toUpperCase(),
+      name: plan.name ?? null,
+      amount: { amount: plan.amount, currency: "INR" },
+      frequency: plan.frequency,
+      start_date: plan.startDateISO,
+    }),
+
+  cancelSipPlan: (id: string, planId: string) =>
+    api.del<{ status: string }>(`/api/v1/portfolios/${id}/sip/${planId}`),
 };

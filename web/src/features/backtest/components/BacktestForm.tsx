@@ -5,6 +5,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input, Field } from "@/components/ui/Input";
 import { cn } from "@/lib/cn";
+import { SymbolSearch, type SymbolPick } from "@/features/markets/components/SymbolSearch";
 import type { BacktestInput, Strategy } from "../api";
 
 /** Collects the simulation inputs. Dates default on mount (not in the initial
@@ -18,6 +19,7 @@ export function BacktestForm({
 }) {
   const [strategy, setStrategy] = useState<Strategy>("lumpsum");
   const [symbol, setSymbol] = useState("AAPL");
+  const [name, setName] = useState("Apple Inc.");
   const [amount, setAmount] = useState("100000");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -63,14 +65,35 @@ export function BacktestForm({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Symbol" htmlFor="bt-symbol" hint="e.g. AAPL, MSFT">
-            <Input
-              id="bt-symbol"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              className="font-mono uppercase"
-            />
-          </Field>
+          <div className="flex flex-col gap-1.5">
+            <span className="eyebrow">Symbol</span>
+            {symbol === "" ? (
+              <SymbolSearch
+                onSelect={(pick: SymbolPick) => {
+                  setSymbol(pick.symbol);
+                  setName(pick.instrument_name ?? "");
+                }}
+                placeholder="Search stock or fund…"
+              />
+            ) : (
+              <div className="flex h-9 items-center justify-between rounded border border-line-2 bg-panel-2 px-2.5">
+                <span className="min-w-0 truncate">
+                  <span className="font-mono text-sm text-fg">{symbol}</span>
+                  {name && <span className="ml-2 text-2xs text-fg-dim">{name}</span>}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSymbol("");
+                    setName("");
+                  }}
+                  className="shrink-0 font-mono text-2xs uppercase tracking-wider text-fg-mute hover:text-fg"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+          </div>
           <Field
             label={strategy === "lumpsum" ? "Amount (₹)" : "Monthly amount (₹)"}
             htmlFor="bt-amount"
