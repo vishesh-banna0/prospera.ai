@@ -16,7 +16,7 @@ export default function HomePage() {
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow">Console</p>
-          <h1 className="mt-1 font-display text-xl font-bold text-fg">The desk</h1>
+          <h1 className="mt-1 font-display text-xl font-bold text-fg">Dashboard</h1>
         </div>
         <div className="w-full sm:w-80">
           <SymbolSearch basePath="/intelligence" placeholder="Analyze a symbol…" />
