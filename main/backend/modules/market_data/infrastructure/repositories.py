@@ -300,10 +300,19 @@ class YFinanceQuoteRepository(QuoteRepository):
     def __init__(self, client: YFinanceClient | None = None) -> None:
         self._client = client or YFinanceClient()
 
+    # yfinance's fast_info.last_price is occasionally a stale or mis-mapped value
+    # for thinly-traded scrips (e.g. a BSE code Yahoo classifies as a fund), while
+    # previous_close and daily history stay correct. No real session moves a stock
+    # this far — Indian circuit limits cap a day's move well under 2x — so a gap
+    # beyond this factor is treated as bad data and the previous close is used.
+    _MAX_PLAUSIBLE_LAST_RATIO = Decimal("4")
+
     async def get_quote(self, symbol: Symbol) -> MarketQuote:
         raw = await self._client.get_quote(symbol)
         currency = self._resolve_currency(raw.get("currency"), symbol)
         last_price = self._require_decimal(raw.get("last"), symbol)
+        previous_close = self._optional_decimal(raw.get("previous_close"))
+        last_price = self._sanitize_last_price(last_price, previous_close, symbol)
 
         return MarketQuote(
             symbol=symbol,
@@ -316,6 +325,31 @@ class YFinanceQuoteRepository(QuoteRepository):
             volume=self._optional_int(raw.get("volume")),
             as_of=datetime.now(tz=UTC),
         )
+
+    def _sanitize_last_price(
+        self,
+        last_price: Decimal,
+        previous_close: Decimal | None,
+        symbol: Symbol,
+    ) -> Decimal:
+        """Reject an implausible last price (bad upstream data) in favour of the
+        previous close, which stays correct even when last_price is garbage."""
+        if previous_close is None or previous_close <= Decimal("0"):
+            return last_price
+        ratio = last_price / previous_close
+        if ratio > self._MAX_PLAUSIBLE_LAST_RATIO or ratio < (
+            Decimal("1") / self._MAX_PLAUSIBLE_LAST_RATIO
+        ):
+            logger.warning(
+                "yfinance last price %s for %s is implausible vs previous close %s "
+                "(%.1fx); using the previous close instead.",
+                last_price,
+                symbol,
+                previous_close,
+                float(ratio),
+            )
+            return previous_close
+        return last_price
 
     def _resolve_currency(self, raw_value: object, symbol: Symbol) -> CurrencyCode:
         if raw_value:
