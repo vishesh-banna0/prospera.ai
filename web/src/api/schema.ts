@@ -1060,6 +1060,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/advisor/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Advisor Summary
+         * @description Run the multi-agent Advisor over recent events and return short/long-term
+         *     guidance plus a plain-English readout.
+         *
+         *     Uses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its
+         *     own local model, falling back to deterministic logic when a model is
+         *     unavailable. This can take several seconds while the models run.
+         */
+        post: operations["advisor_summary_api_v1_advisor_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1081,6 +1106,43 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdvisorReportView */
+        AdvisorReportView: {
+            /** Market Summary */
+            market_summary: string;
+            /** Sectors */
+            sectors: components["schemas"]["SectorImpactView"][];
+            /** Short Term */
+            short_term: components["schemas"]["RecommendationView"][];
+            /** Long Term */
+            long_term: components["schemas"]["RecommendationView"][];
+            /** Narrative */
+            narrative: string;
+            /** Event Count */
+            event_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Models */
+            models?: {
+                [key: string]: string;
+            };
+            /**
+             * Source
+             * @default deterministic
+             */
+            source: string;
+        };
+        /** AdvisorRequest */
+        AdvisorRequest: {
+            /**
+             * Max Events
+             * @default 40
+             */
+            max_events: number;
+        };
         /** AuthTokenView */
         AuthTokenView: {
             /** Token */
@@ -1115,6 +1177,21 @@ export interface components {
             metrics: components["schemas"]["MetricsView"];
             /** Curve */
             curve?: components["schemas"]["EquityPointView"][];
+            benchmark?: components["schemas"]["BenchmarkComparisonView"] | null;
+        };
+        /** BenchmarkComparisonView */
+        BenchmarkComparisonView: {
+            /** Symbol */
+            symbol: string;
+            /** Currency */
+            currency: string;
+            metrics: components["schemas"]["MetricsView"];
+            /** Excess Return Pct */
+            excess_return_pct: number;
+            /** Excess Cagr Pct */
+            excess_cagr_pct: number;
+            /** Outperformed */
+            outperformed: boolean;
         };
         /** CashAdjustmentInput */
         CashAdjustmentInput: {
@@ -1548,6 +1625,8 @@ export interface components {
              * Format: date-time
              */
             end_at: string;
+            /** Benchmark Symbol */
+            benchmark_symbol?: string | null;
         };
         /** MarketMetadataView */
         MarketMetadataView: {
@@ -1769,6 +1848,24 @@ export interface components {
             /** Count */
             count: number;
         };
+        /** RecommendationView */
+        RecommendationView: {
+            /** Target */
+            target: string;
+            /** Action */
+            action: string;
+            /** Horizon */
+            horizon: string;
+            /** Rationale */
+            rationale: string;
+            /** Trigger */
+            trigger?: string | null;
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: number;
+        };
         /** RegisterInput */
         RegisterInput: {
             /** Username */
@@ -1833,6 +1930,17 @@ export interface components {
             symbols?: string[];
             /** Sectors */
             sectors?: string[];
+        };
+        /** SectorImpactView */
+        SectorImpactView: {
+            /** Sector */
+            sector: string;
+            /** Impact */
+            impact: string;
+            /** Magnitude */
+            magnitude: string;
+            /** Drivers */
+            drivers?: string[];
         };
         /** SignalComponentView */
         SignalComponentView: {
@@ -1911,6 +2019,8 @@ export interface components {
              * Format: date-time
              */
             end_at: string;
+            /** Benchmark Symbol */
+            benchmark_symbol?: string | null;
         };
         /** SymbolSearchRequest */
         SymbolSearchRequest: {
@@ -3865,6 +3975,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BacktestResultView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    advisor_summary_api_v1_advisor_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdvisorRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdvisorReportView"];
                 };
             };
             /** @description Validation Error */

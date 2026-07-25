@@ -10,6 +10,9 @@ class LumpSumRequest:
     amount: float
     start_at: datetime
     end_at: datetime
+    # Index to compare against ("what if the same money went into the index").
+    # None uses the app default (NIFTY 50); pass an empty string to disable.
+    benchmark_symbol: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +21,7 @@ class SipRequest:
     monthly_amount: float
     start_at: datetime
     end_at: datetime
+    benchmark_symbol: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +46,24 @@ class EquityPointView:
 
 
 @dataclass(frozen=True, slots=True)
+class BenchmarkComparisonView:
+    """The same contribution schedule replayed against a benchmark index.
+
+    Lets the caller answer "did this strategy beat the market?" — the benchmark
+    runs the identical cash flows (same dates, same amounts) through the same
+    engine, so the metrics are directly comparable. ``excess_*`` fields are the
+    portfolio minus the benchmark.
+    """
+
+    symbol: str
+    currency: str
+    metrics: MetricsView
+    excess_return_pct: float
+    excess_cagr_pct: float
+    outperformed: bool
+
+
+@dataclass(frozen=True, slots=True)
 class BacktestResultView:
     symbol: str
     strategy: str
@@ -51,6 +73,9 @@ class BacktestResultView:
     units: float
     metrics: MetricsView
     curve: tuple[EquityPointView, ...] = field(default_factory=tuple)
+    # Present when a benchmark was requested (default) and enough benchmark price
+    # history was available; None when disabled or the benchmark could not load.
+    benchmark: BenchmarkComparisonView | None = None
 
 
 # Purpose:

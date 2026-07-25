@@ -2939,6 +2939,48 @@
         }
       }
     },
+    "/api/v1/advisor/summary": {
+      "post": {
+        "tags": [
+          "advisor"
+        ],
+        "summary": "Advisor Summary",
+        "description": "Run the multi-agent Advisor over recent events and return short/long-term\nguidance plus a plain-English readout.\n\nUses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its\nown local model, falling back to deterministic logic when a model is\nunavailable. This can take several seconds while the models run.",
+        "operationId": "advisor_summary_api_v1_advisor_summary_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdvisorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvisorReportView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -2962,6 +3004,82 @@
   },
   "components": {
     "schemas": {
+      "AdvisorReportView": {
+        "properties": {
+          "market_summary": {
+            "type": "string",
+            "title": "Market Summary"
+          },
+          "sectors": {
+            "items": {
+              "$ref": "#/components/schemas/SectorImpactView"
+            },
+            "type": "array",
+            "title": "Sectors"
+          },
+          "short_term": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationView"
+            },
+            "type": "array",
+            "title": "Short Term"
+          },
+          "long_term": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationView"
+            },
+            "type": "array",
+            "title": "Long Term"
+          },
+          "narrative": {
+            "type": "string",
+            "title": "Narrative"
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "models": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Models"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "deterministic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "market_summary",
+          "sectors",
+          "short_term",
+          "long_term",
+          "narrative",
+          "event_count",
+          "generated_at"
+        ],
+        "title": "AdvisorReportView"
+      },
+      "AdvisorRequest": {
+        "properties": {
+          "max_events": {
+            "type": "integer",
+            "title": "Max Events",
+            "default": 40
+          }
+        },
+        "type": "object",
+        "title": "AdvisorRequest"
+      },
       "AuthTokenView": {
         "properties": {
           "token": {
@@ -3021,6 +3139,16 @@
             },
             "type": "array",
             "title": "Curve"
+          },
+          "benchmark": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BenchmarkComparisonView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3034,6 +3162,43 @@
           "metrics"
         ],
         "title": "BacktestResultView"
+      },
+      "BenchmarkComparisonView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/MetricsView"
+          },
+          "excess_return_pct": {
+            "type": "number",
+            "title": "Excess Return Pct"
+          },
+          "excess_cagr_pct": {
+            "type": "number",
+            "title": "Excess Cagr Pct"
+          },
+          "outperformed": {
+            "type": "boolean",
+            "title": "Outperformed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "currency",
+          "metrics",
+          "excess_return_pct",
+          "excess_cagr_pct",
+          "outperformed"
+        ],
+        "title": "BenchmarkComparisonView"
       },
       "CashAdjustmentInput": {
         "properties": {
@@ -4218,6 +4383,17 @@
             "type": "string",
             "format": "date-time",
             "title": "End At"
+          },
+          "benchmark_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Symbol"
           }
         },
         "type": "object",
@@ -4878,6 +5054,50 @@
         ],
         "title": "ReasonedOpinionsView"
       },
+      "RecommendationView": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "horizon": {
+            "type": "string",
+            "title": "Horizon"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.5
+          }
+        },
+        "type": "object",
+        "required": [
+          "target",
+          "action",
+          "horizon",
+          "rationale"
+        ],
+        "title": "RecommendationView"
+      },
       "RegisterInput": {
         "properties": {
           "username": {
@@ -5054,6 +5274,36 @@
           "score"
         ],
         "title": "RetrievedChunkView"
+      },
+      "SectorImpactView": {
+        "properties": {
+          "sector": {
+            "type": "string",
+            "title": "Sector"
+          },
+          "impact": {
+            "type": "string",
+            "title": "Impact"
+          },
+          "magnitude": {
+            "type": "string",
+            "title": "Magnitude"
+          },
+          "drivers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Drivers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sector",
+          "impact",
+          "magnitude"
+        ],
+        "title": "SectorImpactView"
       },
       "SignalComponentView": {
         "properties": {
@@ -5232,6 +5482,17 @@
             "type": "string",
             "format": "date-time",
             "title": "End At"
+          },
+          "benchmark_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Symbol"
           }
         },
         "type": "object",

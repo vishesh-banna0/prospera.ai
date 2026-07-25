@@ -148,3 +148,97 @@ async def test_service_raises_without_enough_history() -> None:
                 end_at=datetime(2025, 2, 1, tzinfo=UTC),
             )
         )
+
+
+# ---- benchmark comparison (Tier 2) -----------------------------------------
+
+
+class _MultiSymbolStubMarketData:
+    """Serves a different price series per symbol (portfolio vs. benchmark)."""
+
+    def __init__(self, series_by_symbol: dict[str, list[tuple[date, float]]]) -> None:
+        self._by_symbol = series_by_symbol
+
+    async def get_historical_prices(self, request):
+        series = self._by_symbol.get(request.symbol.upper())
+        if series is None:
+            raise ValueError(f"no history for {request.symbol}")
+        prices = tuple(
+            HistoricalPricePointView(
+                timestamp=datetime(on.year, on.month, on.day, tzinfo=UTC),
+                open_price=str(price),
+                high_price=str(price),
+                low_price=str(price),
+                close_price=str(price),
+                volume=1000,
+            )
+            for on, price in series
+        )
+        return HistoricalPriceSeriesView(
+            symbol=request.symbol, currency="INR", prices=prices
+        )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_comparison_when_portfolio_outperforms() -> None:
+    portfolio = _series(date(2025, 1, 1), 300, 0.001)  # strong climb
+    benchmark = _series(date(2025, 1, 1), 300, 0.0001)  # barely moves
+    service = BacktestService(
+        market_data_service=_MultiSymbolStubMarketData(
+            {"AAA": portfolio, "^NSEI": benchmark}
+        )
+    )
+
+    result = await service.run_lump_sum(
+        LumpSumRequest(
+            symbol="aaa",
+            amount=100000.0,
+            start_at=datetime(2025, 1, 1, tzinfo=UTC),
+            end_at=datetime(2025, 10, 1, tzinfo=UTC),
+        )
+    )
+
+    assert result.benchmark is not None
+    assert result.benchmark.symbol == "^NSEI"
+    assert result.benchmark.outperformed is True
+    assert result.benchmark.excess_return_pct > 0
+    # The benchmark replayed the same cash flow through the same engine.
+    assert result.benchmark.metrics.total_invested == pytest.approx(100000.0)
+
+
+@pytest.mark.asyncio
+async def test_benchmark_disabled_with_empty_string() -> None:
+    portfolio = _series(date(2025, 1, 1), 300, 0.001)
+    service = BacktestService(
+        market_data_service=_MultiSymbolStubMarketData({"AAA": portfolio})
+    )
+    result = await service.run_lump_sum(
+        LumpSumRequest(
+            symbol="AAA",
+            amount=1000.0,
+            start_at=datetime(2025, 1, 1, tzinfo=UTC),
+            end_at=datetime(2025, 10, 1, tzinfo=UTC),
+            benchmark_symbol="",
+        )
+    )
+    assert result.benchmark is None
+
+
+@pytest.mark.asyncio
+async def test_benchmark_skipped_when_unavailable() -> None:
+    # The default benchmark (^NSEI) has no history in the stub, so the
+    # comparison is skipped — but the primary backtest still succeeds.
+    portfolio = _series(date(2025, 1, 1), 300, 0.001)
+    service = BacktestService(
+        market_data_service=_MultiSymbolStubMarketData({"AAA": portfolio})
+    )
+    result = await service.run_lump_sum(
+        LumpSumRequest(
+            symbol="AAA",
+            amount=1000.0,
+            start_at=datetime(2025, 1, 1, tzinfo=UTC),
+            end_at=datetime(2025, 10, 1, tzinfo=UTC),
+        )
+    )
+    assert result.benchmark is None
+    assert result.metrics.final_value > 0

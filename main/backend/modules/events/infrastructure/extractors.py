@@ -100,6 +100,47 @@ _RULES: tuple[_EventRule, ...] = (
             r"slashes? (its )?(guidance|forecast|outlook)|profit warning|warns?)\b"
         ),
     ),
+    # --- Macro / market-wide rules -------------------------------------------
+    # Placed after the top company-specific signals (so a real earnings/M&A/
+    # guidance story still wins) but before the medium company rules, because
+    # their patterns require macro-specific phrases and shouldn't be stolen by
+    # e.g. the REGULATORY rule (which also matches "rbi"/"sec"). A central-bank
+    # rate story ("RBI hikes repo rate") therefore lands as MONETARY_POLICY, not
+    # REGULATORY, while "RBI fines company X" still falls through to REGULATORY.
+    # TRADE_POLICY precedes GEOPOLITICAL so "trade war" (which contains "war") is
+    # classified as trade policy rather than a geopolitical conflict.
+    _EventRule(
+        EventType.TRADE_POLICY,
+        Sentiment.NEUTRAL,
+        EventImportance.MEDIUM,
+        0.65,
+        re.compile(
+            r"\b(tariff\w*|trade war|trade deal|trade agreement|trade pact|"
+            r"import dut(y|ies)|export ban|export curb|embargo|wto)\b"
+        ),
+    ),
+    _EventRule(
+        EventType.GEOPOLITICAL,
+        Sentiment.NEGATIVE,
+        EventImportance.HIGH,
+        0.7,
+        re.compile(
+            r"\b(war|warfare|armed conflict|invasion|invade[sd]?|airstrike|"
+            r"air strike|missile strike|ceasefire|geopolitic\w*|"
+            r"border (clash|tension)|coup|terror attack)\b"
+        ),
+    ),
+    _EventRule(
+        EventType.MONETARY_POLICY,
+        Sentiment.NEUTRAL,
+        EventImportance.HIGH,
+        0.7,
+        re.compile(
+            r"\b(rate hike|rate cut|rate decision|interest rate|repo rate|"
+            r"central bank|monetary policy|basis points|bps|"
+            r"quantitative (easing|tightening))\b"
+        ),
+    ),
     _EventRule(
         EventType.LAYOFFS,
         Sentiment.NEGATIVE,
@@ -173,6 +214,31 @@ _RULES: tuple[_EventRule, ...] = (
         re.compile(
             r"\b(earnings|quarterly results|q[1-4] results|financial results|"
             r"reports? (profit|revenue|loss))\b"
+        ),
+    ),
+    # Lowest priority: broad macro data / sector rules only fire when no
+    # company-specific rule (above, including the generic earnings catch-all)
+    # matched — so a company story mentioning inflation in passing is not
+    # relabelled as a macro-data event.
+    _EventRule(
+        EventType.MACRO_INDICATOR,
+        Sentiment.NEUTRAL,
+        EventImportance.MEDIUM,
+        0.6,
+        re.compile(
+            r"\b(inflation|cpi|gdp|unemployment|jobs report|nonfarm payrolls|"
+            r"payrolls|trade deficit|economic growth|recession|"
+            r"consumer spending|industrial output)\b"
+        ),
+    ),
+    _EventRule(
+        EventType.SECTOR_TREND,
+        Sentiment.NEUTRAL,
+        EventImportance.LOW,
+        0.5,
+        re.compile(
+            r"\b(sector[- ]wide|across the \w+ sector|industry[- ]wide|"
+            r"sector (rally|selloff|sell[- ]off|rotation|outlook))\b"
         ),
     ),
 )

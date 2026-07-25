@@ -5,8 +5,16 @@ import { Badge } from "@/components/ui/Badge";
 import { SignedNumber } from "@/components/ui/SignedNumber";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { formatINR } from "@/lib/money";
-import type { BacktestResultView } from "@/api/types";
+import type { BacktestResultView, BenchmarkComparisonView } from "@/api/types";
 import { MetricsGrid } from "./MetricsGrid";
+
+/** Friendly names for the indices the backend benchmarks against. */
+const BENCHMARK_NAMES: Record<string, string> = {
+  "^NSEI": "NIFTY 50",
+  "^BSESN": "SENSEX",
+  "^GSPC": "S&P 500",
+  "^IXIC": "NASDAQ",
+};
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 function fmtDate(d: string): string {
@@ -48,6 +56,8 @@ export function BacktestResult({ r }: { r: BacktestResultView }) {
         </div>
       </Panel>
 
+      {r.benchmark && <BenchmarkCompare b={r.benchmark} />}
+
       <Panel
         label="Invested vs value"
         aside={
@@ -67,6 +77,59 @@ export function BacktestResult({ r }: { r: BacktestResultView }) {
       <Panel label="Metrics">
         <MetricsGrid m={m} />
       </Panel>
+    </div>
+  );
+}
+
+/** How the same contributions would have done in a benchmark index — the
+ *  "did this beat the market?" panel. Excess figures are portfolio − benchmark. */
+function BenchmarkCompare({ b }: { b: BenchmarkComparisonView }) {
+  const name = BENCHMARK_NAMES[b.symbol] ?? b.symbol;
+  return (
+    <Panel
+      label={`vs Benchmark · ${name}`}
+      aside={
+        <Badge tone={b.outperformed ? "up" : "down"}>
+          {b.outperformed ? "Outperformed" : "Underperformed"}
+        </Badge>
+      }
+    >
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+        <Stat
+          label="Excess return"
+          tip={`Your total return minus ${name}'s over the same period, same contributions.`}
+        >
+          <SignedNumber value={b.excess_return_pct} kind="pct" />
+        </Stat>
+        <Stat label="Excess CAGR" tip={`Your annualized growth minus ${name}'s.`}>
+          <SignedNumber value={b.excess_cagr_pct} kind="pct" />
+        </Stat>
+        <Stat label={`${name} return`} tip="What the same money in the index would have returned.">
+          <SignedNumber value={b.metrics.total_return_pct} kind="pct" />
+        </Stat>
+        <Stat label={`${name} final value`} tip="What the same contributions would be worth in the index.">
+          {formatINR(b.metrics.final_value, 0)}
+        </Stat>
+      </div>
+    </Panel>
+  );
+}
+
+function Stat({
+  label,
+  tip,
+  children,
+}: {
+  label: string;
+  tip: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="eyebrow cursor-help" title={tip}>
+        {label}
+      </span>
+      <span className="font-mono text-sm text-fg tnum">{children}</span>
     </div>
   );
 }

@@ -15,6 +15,7 @@ from backend.api.routes import (
     signals,
     reasoning,
     backtesting,
+    advisor,
 )
 
 
@@ -35,6 +36,7 @@ def create_api_router() -> APIRouter:
     api_router.include_router(signals.router)
     api_router.include_router(reasoning.router)
     api_router.include_router(backtesting.router)
+    api_router.include_router(advisor.router)
 
     return api_router
 

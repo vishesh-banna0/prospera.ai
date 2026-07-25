@@ -29,6 +29,17 @@ class EventType(StrEnum):
     ANALYST_RATING = "analyst_rating"
     PARTNERSHIP = "partnership"
     PRODUCT_LAUNCH = "product_launch"
+
+    # Macro / market-wide events (not tied to a single company). These are
+    # articles about the broader environment stocks trade in: cross-border
+    # conflict, central-bank policy, trade measures, economic data releases, and
+    # sector-wide moves.
+    GEOPOLITICAL = "geopolitical"
+    MONETARY_POLICY = "monetary_policy"
+    TRADE_POLICY = "trade_policy"
+    MACRO_INDICATOR = "macro_indicator"
+    SECTOR_TREND = "sector_trend"
+
     OTHER = "other"
 
 

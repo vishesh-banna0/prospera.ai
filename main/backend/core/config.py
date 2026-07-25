@@ -87,19 +87,40 @@ class Settings(BaseSettings):
     fx_eur_inr: float = Field(default=90.0, alias="FX_EUR_INR")
     fx_gbp_inr: float = Field(default=105.0, alias="FX_GBP_INR")
 
-    # --- Hosted LLM configuration (optional) ---------------------------------
+    # --- Hosted LLM configuration --------------------------------------------
     # Prospera never downloads model weights. The LLM-backed adapters (event
-    # extraction, reasoning) call a hosted, OpenAI-compatible chat endpoint
-    # (e.g. a shared Llama / vLLM / OpenAI gateway). Leave llm_enabled=false to
-    # keep the deterministic, offline default adapters everywhere.
-    llm_enabled: bool = Field(default=False, alias="LLM_ENABLED")
+    # extraction, reasoning, and research embeddings) call a hosted,
+    # OpenAI-compatible endpoint (e.g. a local Ollama, vLLM, or an OpenAI
+    # gateway). This is ON by default: when a model is reachable it is used, and
+    # when it is not (the common offline case — nothing listening on
+    # llm_base_url), the adapters fall back to their deterministic, offline
+    # implementations automatically. The fallback is fast: a refused connection
+    # is detected immediately and the endpoint is then skipped for a short
+    # cooldown, so a missing LLM never repeatedly stalls requests. Set
+    # LLM_ENABLED=false to force the deterministic path everywhere.
+    llm_enabled: bool = Field(default=True, alias="LLM_ENABLED")
     llm_base_url: str = Field(
         default="http://localhost:11434/v1",
         alias="LLM_BASE_URL",
     )
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_model: str = Field(default="llama3.1", alias="LLM_MODEL")
+    # Embedding model for the research RAG store (Tier 5). Ollama exposes
+    # OpenAI-compatible embeddings; "nomic-embed-text" is a common local choice.
+    # When the embeddings call fails, research falls back to the deterministic
+    # hashing embedder.
+    llm_embedding_model: str = Field(
+        default="nomic-embed-text",
+        alias="LLM_EMBEDDING_MODEL",
+    )
     llm_timeout_seconds: float = Field(default=30.0, alias="LLM_TIMEOUT_SECONDS")
+    # Connection-establishment timeout. Kept short so a firewalled/hung endpoint
+    # fails over to the offline fallback quickly (a refused connection is already
+    # instant; this only bounds the "host silently drops packets" case).
+    llm_connect_timeout_seconds: float = Field(
+        default=3.0,
+        alias="LLM_CONNECT_TIMEOUT_SECONDS",
+    )
 
     # --- Authentication ------------------------------------------------------
     # Simple username/password auth. Passwords are stored as PBKDF2-SHA256 hashes;
@@ -114,6 +135,39 @@ class Settings(BaseSettings):
         default=168.0,  # 7 days
         alias="AUTH_TOKEN_TTL_HOURS",
     )
+
+    # --- Advisor (multi-agent) model assignments -----------------------------
+    # The AI Advisor runs a small team of role-specialized agents, each on its
+    # own local model (this is the multi-agent design). Any model that isn't
+    # installed just makes that one agent fall back to deterministic logic, so
+    # the Advisor always works. Defaults use commonly-installed Ollama models.
+    advisor_analyst_model: str = Field(
+        default="qwen2.5:7b",
+        alias="ADVISOR_ANALYST_MODEL",
+    )
+    advisor_strategist_model: str = Field(
+        default="llama3:8b",
+        alias="ADVISOR_STRATEGIST_MODEL",
+    )
+    advisor_writer_model: str = Field(
+        default="qwen2.5:7b",
+        alias="ADVISOR_WRITER_MODEL",
+    )
+
+    # --- News auto-sync (background scheduler) -------------------------------
+    # The news warehouse is pull-then-store. With auto-sync on, the backend
+    # refreshes it on a timer so the UI is always current without anyone running
+    # a manual sync — reads never wait on the network. Requires a market-data
+    # (Finnhub) key; without one, auto-sync is skipped quietly.
+    news_auto_sync_enabled: bool = Field(default=True, alias="NEWS_AUTO_SYNC_ENABLED")
+    news_sync_interval_minutes: float = Field(
+        default=30.0,
+        alias="NEWS_SYNC_INTERVAL_MINUTES",
+    )
+    # Comma-separated categories to refresh. "global" also feeds india/sector via
+    # classification, so it is a good default; add "company" only with symbols.
+    news_sync_categories: str = Field(default="global", alias="NEWS_SYNC_CATEGORIES")
+    news_sync_limit: int = Field(default=50, alias="NEWS_SYNC_LIMIT")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     # shows more detailed logs in development and less verbose logs in production,

@@ -71,9 +71,27 @@ def create_app() -> FastAPI:
                     exc,
                 )
 
+        # Keep the news warehouse fresh on a timer (see NEWS_AUTO_SYNC_* config).
+        # Runs as a detached background task so it never delays boot or requests.
+        if settings.news_auto_sync_enabled:
+            from backend.modules.news.application.auto_sync import (
+                run_news_auto_sync_loop,
+            )
+
+            app.state.news_sync_task = asyncio.create_task(run_news_auto_sync_loop())
+
     @app.on_event("shutdown")
     async def shutdown_event() -> None:
         logger.info(f"Shutting down {settings.app_name}")
+
+        news_sync_task = getattr(app.state, "news_sync_task", None)
+        if news_sync_task is not None:
+            news_sync_task.cancel()
+            try:
+                await news_sync_task
+            except asyncio.CancelledError:
+                pass
+
         from backend.core.database import dispose_engine
 
         await dispose_engine()

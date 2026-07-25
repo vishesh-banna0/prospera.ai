@@ -43,6 +43,12 @@ export type ReasonedOpinionsView = S["ReasonedOpinionsView"];
 export type BacktestResultView = S["BacktestResultView"];
 export type MetricsView = S["MetricsView"];
 export type EquityPointView = S["EquityPointView"];
+export type BenchmarkComparisonView = S["BenchmarkComparisonView"];
+
+// Advisor (multi-agent)
+export type AdvisorReportView = S["AdvisorReportView"];
+export type SectorImpactView = S["SectorImpactView"];
+export type RecommendationView = S["RecommendationView"];
 
 // News / events
 export type NewsArticleView = S["NewsArticleView"];

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import re
 
@@ -9,6 +10,9 @@ from backend.modules.research.application.providers import (
     EmbeddingProviderContract,
 )
 from backend.modules.research.domain.entities import Embedding
+from backend.shared.llm import LLMClient
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
@@ -68,6 +72,70 @@ class HashingEmbedder(EmbeddingProviderContract):
         if norm == 0.0:
             return tuple(vector)
         return tuple(value / norm for value in vector)
+
+
+class LLMEmbedder(EmbeddingProviderContract):
+    """Semantic embedder backed by an OpenAI-compatible ``/embeddings`` endpoint.
+
+    This is the Tier-5 upgrade over ``HashingEmbedder``: instead of a lexical
+    bag-of-words vector, it produces true semantic embeddings from a hosted /
+    local model (e.g. Ollama's ``nomic-embed-text``), so passages that mean the
+    same thing land near each other even without shared vocabulary.
+
+    Robustness mirrors the rest of the LLM adapters: if the embeddings endpoint
+    is unreachable or errors, it falls back to the injected deterministic
+    embedder so retrieval never hard-fails.
+
+    Caveat — vectors from different models are not comparable. Ingestion and
+    querying must use the same embedder; if some chunks were embedded while the
+    LLM was down (hashing fallback) and others while it was up (LLM), the
+    mismatched-dimension pairs simply score 0 (see ``_cosine_similarity``) and
+    are skipped rather than returning wrong results. Re-ingest after switching
+    embedders for full recall.
+    """
+
+    name = "llm"
+
+    def __init__(
+        self,
+        llm: LLMClient,
+        model: str,
+        fallback: EmbeddingProviderContract | None = None,
+        expected_dimensions: int = 768,
+    ) -> None:
+        self._llm = llm
+        self._model = model
+        self._fallback = fallback
+        # Best-effort until the first successful call reports the real width.
+        # (Nothing outside the contract actually reads this today.)
+        self._dimensions = expected_dimensions
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    async def embed_texts(
+        self,
+        texts: list[str],
+    ) -> list[Embedding]:
+        if not texts:
+            return []
+        try:
+            raw_vectors = await self._llm.embed(texts, self._model)
+            vectors = [tuple(float(x) for x in vector) for vector in raw_vectors]
+            if any(len(vector) == 0 for vector in vectors):
+                raise ValueError("LLM returned an empty embedding vector.")
+            self._dimensions = len(vectors[0])
+            return vectors
+        except Exception as exc:
+            if self._fallback is None:
+                raise
+            logger.warning(
+                "LLM embedding failed (%s); using the %s fallback embedder.",
+                exc,
+                self._fallback.name,
+            )
+            return await self._fallback.embed_texts(texts)
 
 
 class PlainTextParser(DocumentParserContract):

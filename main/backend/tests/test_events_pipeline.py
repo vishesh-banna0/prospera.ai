@@ -147,6 +147,53 @@ async def test_extraction_service_runs_pipeline_and_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rule_based_extractor_detects_macro_events() -> None:
+    extractor = RuleBasedEventExtractor()
+
+    cases = {
+        "War escalates as invasion triggers a ceasefire collapse": EventType.GEOPOLITICAL,
+        "RBI hikes the repo rate by 50 basis points": EventType.MONETARY_POLICY,
+        "Government imposes new tariffs in an escalating trade war": EventType.TRADE_POLICY,
+        "India CPI inflation rises as GDP growth slows": EventType.MACRO_INDICATOR,
+        "A broad sector-wide rally lifts the market": EventType.SECTOR_TREND,
+    }
+    for title, expected in cases.items():
+        events = await extractor.extract_events(_article("m", title))
+        assert len(events) == 1, title
+        assert events[0].event_type == expected, title
+
+
+@pytest.mark.asyncio
+async def test_macro_rules_do_not_steal_company_classification() -> None:
+    extractor = RuleBasedEventExtractor()
+
+    # A regulatory action by the RBI must stay REGULATORY — the monetary rule
+    # requires an actual policy phrase (repo/rate/policy), which this lacks.
+    reg = await extractor.extract_events(
+        _article(
+            "c1",
+            "RBI fines a private bank after an investigation",
+            symbols=("HDFC",),
+        )
+    )
+    assert len(reg) == 1
+    assert reg[0].event_type == EventType.REGULATORY
+
+    # A genuine earnings story that mentions inflation is still an earnings
+    # event — company rules outrank the low-priority macro-indicator rule.
+    earn = await extractor.extract_events(
+        _article(
+            "c2",
+            "Acme beats earnings estimates despite high inflation",
+            summary="Quarterly profit topped expectations.",
+            symbols=("ACME",),
+        )
+    )
+    assert len(earn) == 1
+    assert earn[0].event_type == EventType.EARNINGS_BEAT
+
+
+@pytest.mark.asyncio
 async def test_extraction_service_reports_when_no_extractor_configured() -> None:
     service = EventExtractionService(
         article_repository=InMemoryNewsArticleRepository(),

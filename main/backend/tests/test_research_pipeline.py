@@ -9,11 +9,31 @@ from backend.modules.research.application.dto import (
 )
 from backend.modules.research.application.services import ResearchService
 from backend.modules.research.domain.chunking import chunk_text
-from backend.modules.research.infrastructure.providers import HashingEmbedder
+from backend.modules.research.infrastructure.providers import (
+    HashingEmbedder,
+    LLMEmbedder,
+)
 from backend.modules.research.infrastructure.repositories import (
     InMemoryResearchRepository,
     _cosine_similarity,
 )
+from backend.shared.llm import LLMClient
+
+
+class _FakeEmbedLLM(LLMClient):
+    """Fake LLM exposing an ``embed`` method (or raising) for offline tests."""
+
+    def __init__(self, dim: int = 8, error: Exception | None = None) -> None:
+        self._dim = dim
+        self._error = error
+
+    async def complete(self, system, user, temperature=0.0, max_tokens=None) -> str:
+        return ""
+
+    async def embed(self, inputs: list[str], model: str) -> list[list[float]]:
+        if self._error is not None:
+            raise self._error
+        return [[float((len(text) + i) % 7) for i in range(self._dim)] for text in inputs]
 
 
 def test_chunk_text_overlaps_and_covers_full_text() -> None:
@@ -126,6 +146,47 @@ async def test_reingesting_same_document_is_idempotent() -> None:
     assert first.document_id == second.document_id
     assert stats.total_documents == 1
     assert stats.total_chunks == first.chunk_count
+
+
+@pytest.mark.asyncio
+async def test_llm_embedder_uses_llm_and_reports_dimensions() -> None:
+    embedder = LLMEmbedder(
+        _FakeEmbedLLM(dim=8), model="fake-embed", fallback=HashingEmbedder()
+    )
+
+    vectors = await embedder.embed_texts(["alpha", "beta gamma"])
+
+    assert len(vectors) == 2
+    assert all(len(v) == 8 for v in vectors)
+    assert embedder.dimensions == 8  # learned from the first successful call
+    assert await embedder.embed_texts([]) == []
+
+
+@pytest.mark.asyncio
+async def test_llm_embedder_falls_back_on_error() -> None:
+    fallback = HashingEmbedder(dimensions=32)
+    embedder = LLMEmbedder(
+        _FakeEmbedLLM(error=RuntimeError("no embeddings endpoint")),
+        model="fake-embed",
+        fallback=fallback,
+    )
+
+    vectors = await embedder.embed_texts(["some financial text"])
+
+    assert len(vectors) == 1
+    # Fell back to the hashing embedder's vector width.
+    assert len(vectors[0]) == 32
+
+
+@pytest.mark.asyncio
+async def test_llm_embedder_raises_without_fallback_on_error() -> None:
+    embedder = LLMEmbedder(
+        _FakeEmbedLLM(error=RuntimeError("boom")),
+        model="fake-embed",
+        fallback=None,
+    )
+    with pytest.raises(RuntimeError):
+        await embedder.embed_texts(["x"])
 
 
 @pytest.mark.asyncio

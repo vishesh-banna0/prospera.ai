@@ -27,8 +27,13 @@ _SYSTEM_PROMPT = (
     "Allowed event_type values: "
     "earnings_beat, earnings_miss, earnings, guidance_raised, guidance_cut, "
     "merger_acquisition, ipo, dividend, leadership_change, regulatory, legal, "
-    "layoffs, analyst_rating, partnership, product_launch, other.\n"
-    "If the article is not about a specific financial event, set is_event to false."
+    "layoffs, analyst_rating, partnership, product_launch, geopolitical, "
+    "monetary_policy, trade_policy, macro_indicator, sector_trend, other.\n"
+    "Use geopolitical for cross-border conflict/war, monetary_policy for "
+    "central-bank rate decisions, trade_policy for tariffs/trade measures, "
+    "macro_indicator for economic data (inflation, GDP, jobs), and sector_trend "
+    "for sector-wide moves. If the article is not about a specific financial "
+    "event, set is_event to false."
 )
 
 

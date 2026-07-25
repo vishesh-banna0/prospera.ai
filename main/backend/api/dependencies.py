@@ -79,11 +79,19 @@ from backend.modules.events.infrastructure.extractors import RuleBasedEventExtra
 from backend.modules.events.infrastructure.llm_extractor import LLMEventExtractor
 from backend.modules.events.infrastructure.repositories import SqlNewsEventRepository
 
-from backend.shared.llm import build_llm_from_settings
+from backend.shared.llm import build_llm_for_model, build_llm_from_settings
+
+from backend.modules.advisor.application.agents import (
+    AnalystAgent,
+    StrategistAgent,
+    WriterAgent,
+)
+from backend.modules.advisor.application.services import AdvisorService
 
 from backend.modules.research.application.services import ResearchService
 from backend.modules.research.infrastructure.providers import (
     HashingEmbedder,
+    LLMEmbedder,
     PlainTextParser,
 )
 from backend.modules.research.infrastructure.repositories import SqlResearchRepository
@@ -291,14 +299,26 @@ async def get_research_service(
     """
     Provide research RAG service.
 
-    The default embedder is a deterministic feature-hashing embedder and the
-    default parser handles plain text (no model download, no network). Swap in
-    a sentence-transformers / hosted-API embedder or a PDF parser adapter here
-    to upgrade retrieval quality without changing the service, store, or routes.
+    When an LLM is configured (LLM_ENABLED=true, the default), retrieval uses
+    real semantic embeddings from the OpenAI-compatible ``/embeddings`` endpoint
+    (Tier 5), falling back to the deterministic feature-hashing embedder if the
+    endpoint is unreachable. With the LLM disabled, the hashing embedder is used
+    directly — no model download, no network. The parser handles plain text.
     """
+    settings = get_settings()
+    llm = build_llm_from_settings(settings)
+    embedder = (
+        LLMEmbedder(
+            llm,
+            model=settings.llm_embedding_model,
+            fallback=HashingEmbedder(),
+        )
+        if llm is not None
+        else HashingEmbedder()
+    )
     return ResearchService(
         repository=SqlResearchRepository(session),
-        embedder=HashingEmbedder(),
+        embedder=embedder,
         parser=PlainTextParser(),
         commit=session.commit,
     )
@@ -393,6 +413,38 @@ async def get_backtest_service(
     """
     return BacktestService(
         market_data_service=await get_market_data_service(session),
+    )
+
+
+async def get_advisor_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> AdvisorService:
+    """
+    Provide the multi-agent AI Advisor service.
+
+    Builds the Analyst / Strategist / Writer agents — each on its own configured
+    local model (see ADVISOR_*_MODEL) — and wires them into the LangGraph agent
+    graph over the events warehouse. Any model that isn't reachable makes that
+    agent fall back to deterministic logic, so the Advisor always responds.
+    """
+    settings = get_settings()
+    analyst = AnalystAgent(
+        build_llm_for_model(settings, settings.advisor_analyst_model),
+        settings.advisor_analyst_model,
+    )
+    strategist = StrategistAgent(
+        build_llm_for_model(settings, settings.advisor_strategist_model),
+        settings.advisor_strategist_model,
+    )
+    writer = WriterAgent(
+        build_llm_for_model(settings, settings.advisor_writer_model),
+        settings.advisor_writer_model,
+    )
+    return AdvisorService(
+        event_repository=SqlNewsEventRepository(session),
+        analyst=analyst,
+        strategist=strategist,
+        writer=writer,
     )
 
 
