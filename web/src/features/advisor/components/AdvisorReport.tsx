@@ -8,6 +8,7 @@ import type {
   RecommendationView,
   SectorImpactView,
 } from "@/api/types";
+import { PortfolioAdvice } from "./PortfolioAdvice";
 
 const impactTone: Record<string, BadgeTone> = {
   positive: "up",
@@ -53,6 +54,10 @@ export function AdvisorReport({ r }: { r: AdvisorReportView }) {
           {modelLine && <span>{modelLine}</span>}
         </div>
       </Panel>
+
+      {/* Sits directly under the readout when present: "what this means for me"
+          is the first thing worth reading, before the market-wide detail. */}
+      {r.portfolio && <PortfolioAdvice p={r.portfolio} />}
 
       {r.sectors.length > 0 && (
         <Panel label="Sector impact">

@@ -93,7 +93,9 @@ def create_app() -> FastAPI:
                 pass
 
         from backend.core.database import dispose_engine
+        from backend.shared.llm_runtime import close_llm_runtime
 
+        await close_llm_runtime()
         await dispose_engine()
 
     return app

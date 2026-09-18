@@ -22,6 +22,16 @@ yfinance==0.2.65
 # for orchestration only.
 langgraph==1.2.9
 
+# Vector search for the research knowledge base (RAG). FAISS holds an exact
+# inner-product index over L2-normalized embeddings, so its scores are cosine
+# similarities and it ranks identically to the SQL fallback — set
+# RESEARCH_VECTOR_BACKEND=sql to drop back to the pure-Python scan.
+faiss-cpu==1.14.3
+
+# Numerical kernel for FAISS and for portfolio optimization / risk analytics
+# (covariance, mean-variance weights, risk contributions).
+numpy==2.4.6
+
 # Utilities that are commonly needed in backend services
 python-dateutil==2.9.0.post0
 tenacity==9.1.2

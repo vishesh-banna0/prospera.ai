@@ -362,6 +362,11 @@ Large generic utility collections or feature-specific code.
 
 ## Backend Environment Setup
 
+For free hosted LLMs, add `OPENROUTER_API_KEY` to `.env` and restart the backend.
+Prospera automatically routes extraction, analysis, reasoning, and writing to
+task-specific free models, with free model and deterministic fallbacks. See
+[OpenRouter setup and model choices](docs/OPENROUTER.md).
+
 The backend should currently be set up with **Python 3.11**.
 
 Python `3.14` may fail while installing dependencies in this stack because some packages, especially `pydantic-core`, may not resolve cleanly there in this environment.

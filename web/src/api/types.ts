@@ -49,6 +49,20 @@ export type BenchmarkComparisonView = S["BenchmarkComparisonView"];
 export type AdvisorReportView = S["AdvisorReportView"];
 export type SectorImpactView = S["SectorImpactView"];
 export type RecommendationView = S["RecommendationView"];
+export type PortfolioAdviceView = S["PortfolioAdviceView"];
+export type HoldingActionView = S["HoldingActionView"];
+
+// Portfolio optimization / portfolio-level risk
+export type PortfolioOptimizationView = S["PortfolioOptimizationView"];
+export type PortfolioRiskView = S["PortfolioRiskView"];
+export type AllocationView = S["AllocationView"];
+export type PortfolioMetricsView = S["PortfolioMetricsView"];
+export type RebalanceTradeView = S["RebalanceTradeView"];
+export type CorrelationRowView = S["CorrelationRowView"];
+
+// Multi-horizon hybrid forecast
+export type MultiHorizonForecastView = S["MultiHorizonForecastView"];
+export type HorizonForecastView = S["HorizonForecastView"];
 
 // News / events
 export type NewsArticleView = S["NewsArticleView"];

@@ -860,6 +860,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/predictions/forecast/{symbol}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forecast
+         * @description Forecast a symbol across several horizons at once.
+         *
+         *     Runs the hybrid ensemble — a logistic classifier on technical features, an
+         *     EWMA drift/volatility model, and an AR(1) model on log returns — pooling
+         *     their probabilities in log-odds space, then tilting the blend by the
+         *     recent news-event score for the symbol.
+         *
+         *     Defaults cover 1 day, 1 week, 1 month, and 1 quarter of trading days.
+         *     Reporting several horizons is deliberate: 1-day direction is close to a
+         *     coin flip and skill improves with horizon, so a single number invites
+         *     over-reading. Pass ``include_events=false`` for a price-only forecast,
+         *     which is the clean way to see what the news term actually contributed.
+         *
+         *     This endpoint does not persist — use ``POST /predictions/predict/{symbol}``
+         *     for a stored, single-horizon forecast.
+         */
+        post: operations["forecast_api_v1_predictions_forecast__symbol__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/predictions/": {
         parameters: {
             query?: never;
@@ -1077,8 +1111,71 @@ export interface paths {
          *     Uses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its
          *     own local model, falling back to deterministic logic when a model is
          *     unavailable. This can take several seconds while the models run.
+         *
+         *     Pass ``environment_id`` to make the advice portfolio-aware: the graph
+         *     routes through a Portfolio agent that maps the market view onto the
+         *     positions that environment actually holds, returning add / trim / exit /
+         *     hold per position, concentration warnings, and the calls the portfolio has
+         *     no exposure to. Omit it for the market-wide report.
          */
         post: operations["advisor_summary_api_v1_advisor_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/optimize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Optimize Portfolio
+         * @description Solve for target portfolio weights and explain the resulting risk.
+         *
+         *     Objectives: ``max_sharpe`` (default), ``min_variance``,
+         *     ``inverse_volatility``, ``equal_weight``. All are long-only and fully
+         *     invested, with ``max_weight`` capping any single position.
+         *
+         *     Pass ``symbols`` to optimize a candidate basket, or ``environment_id`` to
+         *     optimize what a simulator environment actually holds — in which case the
+         *     response also carries current weights and the rebalancing trades that
+         *     would reach the target.
+         *
+         *     Every result reports an equal-weight baseline alongside it, so it is
+         *     visible whether the optimization actually earned its estimation error.
+         */
+        post: operations["optimize_portfolio_api_v1_portfolio_optimize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolio/risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Portfolio Risk
+         * @description Risk decomposition of an environment's holdings exactly as they stand.
+         *
+         *     Reports portfolio volatility, Sharpe, diversification ratio, effective
+         *     number of assets, max drawdown, the correlation matrix, and each
+         *     position's share of total risk — which is not the same as its share of
+         *     capital. Concentration warnings call out positions that dominate either.
+         */
+        post: operations["analyze_portfolio_risk_api_v1_portfolio_risk_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1134,6 +1231,7 @@ export interface components {
              * @default deterministic
              */
             source: string;
+            portfolio?: components["schemas"]["PortfolioAdviceView"] | null;
         };
         /** AdvisorRequest */
         AdvisorRequest: {
@@ -1142,6 +1240,34 @@ export interface components {
              * @default 40
              */
             max_events: number;
+            /** Environment Id */
+            environment_id?: string | null;
+        };
+        /** AllocationView */
+        AllocationView: {
+            /** Symbol */
+            symbol: string;
+            /** Target Weight Pct */
+            target_weight_pct: number;
+            /** Current Weight Pct */
+            current_weight_pct?: number | null;
+            /** Weight Change Pct */
+            weight_change_pct?: number | null;
+            /**
+             * Risk Contribution Pct
+             * @default 0
+             */
+            risk_contribution_pct: number;
+            /**
+             * Annualized Return Pct
+             * @default 0
+             */
+            annualized_return_pct: number;
+            /**
+             * Annualized Volatility Pct
+             * @default 0
+             */
+            annualized_volatility_pct: number;
         };
         /** AuthTokenView */
         AuthTokenView: {
@@ -1275,6 +1401,13 @@ export interface components {
             companies: components["schemas"]["CompanyScoreView"][];
             /** Count */
             count: number;
+        };
+        /** CorrelationRowView */
+        CorrelationRowView: {
+            /** Symbol */
+            symbol: string;
+            /** Correlations */
+            correlations: number[];
         };
         /** CreateEnvironmentInput */
         CreateEnvironmentInput: {
@@ -1522,6 +1655,24 @@ export interface components {
             /** Prices */
             prices: components["schemas"]["HistoricalPricePointView"][];
         };
+        /** HoldingActionView */
+        HoldingActionView: {
+            /** Symbol */
+            symbol: string;
+            /** Action */
+            action: string;
+            /** Weight Pct */
+            weight_pct: number;
+            /** Rationale */
+            rationale: string;
+            /** Driver */
+            driver?: string | null;
+            /**
+             * Confidence
+             * @default 0.5
+             */
+            confidence: number;
+        };
         /** HoldingView */
         HoldingView: {
             /** Symbol */
@@ -1536,6 +1687,19 @@ export interface components {
             unrealized_pnl?: string | null;
             /** Return Percentage */
             return_percentage?: number | null;
+        };
+        /** HorizonForecastView */
+        HorizonForecastView: {
+            /** Horizon Days */
+            horizon_days: number;
+            /** Direction */
+            direction: string;
+            /** Probability Up */
+            probability_up: number;
+            /** Expected Return Pct */
+            expected_return_pct: number;
+            /** Confidence */
+            confidence: number;
         };
         /** IngestDocumentRequest */
         IngestDocumentRequest: {
@@ -1674,6 +1838,39 @@ export interface components {
              */
             currency: string;
         };
+        /** MultiHorizonForecastView */
+        MultiHorizonForecastView: {
+            /** Symbol */
+            symbol: string;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Model Name */
+            model_name: string;
+            /** Forecasts */
+            forecasts: components["schemas"]["HorizonForecastView"][];
+            /**
+             * Event Score
+             * @default 0
+             */
+            event_score: number;
+            /**
+             * Event Count
+             * @default 0
+             */
+            event_count: number;
+            /**
+             * Observations
+             * @default 0
+             */
+            observations: number;
+            /** Features */
+            features?: {
+                [key: string]: number;
+            };
+        };
         /** NewsArticleView */
         NewsArticleView: {
             /** Article Id */
@@ -1738,11 +1935,114 @@ export interface components {
             /** Sector Articles */
             sector_articles: number;
         };
+        /** OptimizePortfolioRequest */
+        OptimizePortfolioRequest: {
+            /**
+             * Symbols
+             * @default []
+             */
+            symbols: string[];
+            /** Environment Id */
+            environment_id?: string | null;
+            /**
+             * Objective
+             * @default max_sharpe
+             */
+            objective: string;
+            /**
+             * Lookback Days
+             * @default 365
+             */
+            lookback_days: number;
+            /**
+             * Risk Free Rate
+             * @default 0
+             */
+            risk_free_rate: number;
+            /**
+             * Max Weight
+             * @default 0.35
+             */
+            max_weight: number;
+        };
         /**
          * OwnerType
          * @enum {string}
          */
         OwnerType: "user" | "ai" | "rl" | "backtest";
+        /** PortfolioAdviceView */
+        PortfolioAdviceView: {
+            /** Environment Id */
+            environment_id: string;
+            /** Holdings Count */
+            holdings_count: number;
+            /** Actions */
+            actions?: components["schemas"]["HoldingActionView"][];
+            /** Concentration Warnings */
+            concentration_warnings?: string[];
+            /** Unheld Opportunities */
+            unheld_opportunities?: string[];
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+        };
+        /** PortfolioMetricsView */
+        PortfolioMetricsView: {
+            /** Expected Return Pct */
+            expected_return_pct: number;
+            /** Volatility Pct */
+            volatility_pct: number;
+            /** Sharpe Ratio */
+            sharpe_ratio: number;
+            /** Diversification Ratio */
+            diversification_ratio: number;
+            /** Effective Number Of Assets */
+            effective_number_of_assets: number;
+            /** Max Drawdown Pct */
+            max_drawdown_pct: number;
+            /** Historical Return Pct */
+            historical_return_pct: number;
+        };
+        /** PortfolioOptimizationView */
+        PortfolioOptimizationView: {
+            /** Objective */
+            objective: string;
+            /** Symbols */
+            symbols: string[];
+            /** Allocations */
+            allocations: components["schemas"]["AllocationView"][];
+            optimized: components["schemas"]["PortfolioMetricsView"];
+            equal_weight_baseline: components["schemas"]["PortfolioMetricsView"];
+            /**
+             * Correlations
+             * @default []
+             */
+            correlations: components["schemas"]["CorrelationRowView"][];
+            /**
+             * Trades
+             * @default []
+             */
+            trades: components["schemas"]["RebalanceTradeView"][];
+            /**
+             * Observations
+             * @default 0
+             */
+            observations: number;
+            /**
+             * Lookback Days
+             * @default 0
+             */
+            lookback_days: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Notes */
+            notes?: string[];
+        };
         /** PortfolioPerformanceView */
         PortfolioPerformanceView: {
             /** Environment Id */
@@ -1757,6 +2057,51 @@ export interface components {
             unrealized_pnl: string;
             /** Return Percentage */
             return_percentage: number;
+        };
+        /** PortfolioRiskRequest */
+        PortfolioRiskRequest: {
+            /** Environment Id */
+            environment_id: string;
+            /**
+             * Lookback Days
+             * @default 365
+             */
+            lookback_days: number;
+            /**
+             * Risk Free Rate
+             * @default 0
+             */
+            risk_free_rate: number;
+        };
+        /** PortfolioRiskView */
+        PortfolioRiskView: {
+            /** Environment Id */
+            environment_id: string;
+            /** Symbols */
+            symbols: string[];
+            /** Allocations */
+            allocations: components["schemas"]["AllocationView"][];
+            metrics: components["schemas"]["PortfolioMetricsView"];
+            /**
+             * Correlations
+             * @default []
+             */
+            correlations: components["schemas"]["CorrelationRowView"][];
+            /**
+             * Concentration Warnings
+             * @default []
+             */
+            concentration_warnings: string[];
+            /**
+             * Observations
+             * @default 0
+             */
+            observations: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
         };
         /** PredictionView */
         PredictionView: {
@@ -1847,6 +2192,17 @@ export interface components {
             opinions: components["schemas"]["ReasonedOpinionView"][];
             /** Count */
             count: number;
+        };
+        /** RebalanceTradeView */
+        RebalanceTradeView: {
+            /** Symbol */
+            symbol: string;
+            /** Action */
+            action: string;
+            /** Amount */
+            amount: string;
+            /** Reason */
+            reason: string;
         };
         /** RecommendationView */
         RecommendationView: {
@@ -3669,6 +4025,41 @@ export interface operations {
             };
         };
     };
+    forecast_api_v1_predictions_forecast__symbol__post: {
+        parameters: {
+            query?: {
+                lookback_days?: number;
+                horizons?: number[];
+                include_events?: boolean;
+            };
+            header?: never;
+            path: {
+                symbol: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultiHorizonForecastView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_predictions_api_v1_predictions__get: {
         parameters: {
             query?: {
@@ -4008,6 +4399,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdvisorReportView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    optimize_portfolio_api_v1_portfolio_optimize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimizePortfolioRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOptimizationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_portfolio_risk_api_v1_portfolio_risk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioRiskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioRiskView"];
                 };
             };
             /** @description Validation Error */

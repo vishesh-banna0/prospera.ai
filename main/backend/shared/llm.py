@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import time
+import uuid
+from typing import Literal
 from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
+
+from backend.shared.llm_runtime import get_llm_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +95,7 @@ class OpenAICompatibleLLM(LLMClient):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._api_key = api_key
+        self.last_model: str | None = None
         # Short connect timeout so an unreachable host fails over fast; the
         # (longer) read timeout still allows slow generations to complete.
         self._timeout = httpx.Timeout(
@@ -103,6 +109,12 @@ class OpenAICompatibleLLM(LLMClient):
             headers["Authorization"] = f"Bearer {self._api_key}"
         return headers
 
+    async def _send(self, path: str, payload: dict[str, Any]) -> httpx.Response:
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            return await client.post(
+                f"{self._base_url}{path}", json=payload, headers=self._headers(),
+            )
+
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         """POST to the endpoint, maintaining the availability cache.
 
@@ -115,14 +127,9 @@ class OpenAICompatibleLLM(LLMClient):
             raise LLMUnavailableError(f"LLM at {self._base_url} is in cooldown.")
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    f"{self._base_url}{path}",
-                    json=payload,
-                    headers=self._headers(),
-                )
-                response.raise_for_status()
-                data = response.json()
+            response = await self._send(path, payload)
+            response.raise_for_status()
+            data = response.json()
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout) as exc:
             _mark_unavailable(self._base_url)
             raise LLMUnavailableError(f"LLM at {self._base_url} unreachable: {exc}") from exc
@@ -151,10 +158,20 @@ class OpenAICompatibleLLM(LLMClient):
 
         data = await self._post("/chat/completions", payload)
 
+        return self._completion_text(data)
+
+    def _completion_text(self, data: dict[str, Any]) -> str:
         try:
-            return str(data["choices"][0]["message"]["content"])
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            if choice.get("finish_reason") in {"length", "content_filter"}:
+                raise ValueError("LLM completion was truncated or filtered.")
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError("LLM returned no usable text.")
         except (KeyError, IndexError, TypeError) as exc:
-            raise ValueError(f"Unexpected LLM response shape: {data!r}") from exc
+            raise ValueError("Unexpected LLM response shape.") from exc
+        self.last_model = data.get("model") or self._model
+        return content.strip()
 
     async def embed(self, inputs: list[str], model: str) -> list[list[float]]:
         """Return one embedding vector per input via ``/embeddings``.
@@ -182,7 +199,130 @@ class OpenAICompatibleLLM(LLMClient):
         return vectors
 
 
-def build_llm_from_settings(settings: Any) -> LLMClient | None:
+LLMTask = Literal["extraction", "analysis", "reasoning", "strategist", "portfolio", "writer"]
+
+
+class OpenRouterFreeLLM(OpenAICompatibleLLM):
+    """Task-specific free routing with no paid model or embedding fallback."""
+
+    def __init__(
+        self, *, api_key: str, models: list[str], task: LLMTask,
+        timeout_seconds: float = 60.0, cache_ttl_seconds: float = 300.0,
+    ) -> None:
+        models = list(dict.fromkeys(model.strip() for model in models))
+        if not models or any(
+            not (model == "openrouter/free" or model.endswith(":free"))
+            for model in models
+        ):
+            raise ValueError("OpenRouter models must use :free or openrouter/free.")
+        if not api_key.strip():
+            raise ValueError("OPENROUTER_API_KEY is required for OpenRouter.")
+        super().__init__(
+            base_url="https://openrouter.ai/api/v1", model=models[0],
+            api_key=api_key.strip(), timeout_seconds=timeout_seconds,
+            connect_timeout_seconds=10.0,
+        )
+        self._models = models
+        self._task = task
+        self._deadline = timeout_seconds
+        self._cache_ttl = cache_ttl_seconds
+
+    async def _send(self, path: str, payload: dict[str, Any]) -> httpx.Response:
+        return await get_llm_runtime().http.post(
+            f"{self._base_url}{path}", json=payload, headers=self._headers(),
+            timeout=self._timeout,
+        )
+
+    async def complete(
+        self, system: str, user: str, temperature: float = 0.0,
+        max_tokens: int | None = None,
+    ) -> str:
+        self.last_model = None
+        deep = self._task in {"reasoning", "strategist", "portfolio"}
+        payload: dict[str, Any] = {
+            "models": self._models,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "stream": False,
+            "max_tokens": max_tokens if max_tokens is not None else (
+                6144 if deep else 768 if self._task == "extraction" else 2048
+            ),
+            "provider": {
+                "allow_fallbacks": True,
+                "max_price": {"prompt": 0, "completion": 0, "request": 0},
+            },
+            "reasoning": {"effort": "low", "exclude": True} if deep else {
+                "enabled": False, "exclude": True,
+            },
+        }
+        if self._task != "writer":
+            payload["response_format"] = {"type": "json_object"}
+        # Exact prompt + model/options + credential scope; no raw prompts or
+        # credentials are retained as cache keys. Nonzero-temperature requests
+        # intentionally remain independent.
+        key = hashlib.sha256(json.dumps(
+            [self._api_key, self._task, payload, self._deadline, self._cache_ttl],
+            sort_keys=True,
+        ).encode()).hexdigest()
+        if temperature != 0:
+            key = uuid.uuid4().hex
+
+        async def generate() -> tuple[str, str]:
+            return await self._generate(payload)
+
+        try:
+            content, model = await get_llm_runtime().complete(
+                key, generate, ttl=self._cache_ttl if temperature == 0 else 0,
+                timeout=self._deadline,
+            )
+        except TimeoutError as exc:
+            raise LLMUnavailableError("LLM request exceeded its total time budget.") from exc
+        self.last_model = model
+        return content
+
+    async def _generate(self, payload: dict[str, Any]) -> tuple[str, str]:
+        started = time.monotonic()
+        try:
+            data = await self._post("/chat/completions", payload)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in {401, 402, 403, 429, 503}:
+                # Do not hammer an exhausted free quota for every article/agent.
+                _mark_unavailable(self._base_url)
+                try:
+                    delay = float(exc.response.headers.get("Retry-After", "60"))
+                    _UNAVAILABLE_UNTIL[self._base_url] = time.monotonic() + min(
+                        300.0, max(60.0, delay)
+                    )
+                except ValueError:
+                    pass
+            raise
+        content = self._completion_text(data)
+        if self._task != "writer":
+            extract_json_object(content)
+        model = self.last_model or self._model
+        logger.info(
+            "OpenRouter task=%s model=%s duration_ms=%.0f",
+            self._task, model, (time.monotonic() - started) * 1000,
+        )
+        return content, model
+
+    async def embed(self, inputs: list[str], model: str) -> list[list[float]]:
+        raise NotImplementedError("Free OpenRouter routing is chat-only; use local embeddings.")
+
+
+def uses_openrouter(settings: Any) -> bool:
+    provider = getattr(settings, "llm_provider", "auto")
+    return provider == "openrouter" or (
+        provider == "auto" and bool(getattr(settings, "openrouter_api_key", "").strip())
+    )
+
+
+def build_llm_from_settings(
+    settings: Any, task: LLMTask = "reasoning",
+) -> LLMClient | None:
     """Return a configured LLM client, or None when LLM use is disabled.
 
     Call sites use the returned client only if it is not None, so leaving
@@ -192,6 +332,19 @@ def build_llm_from_settings(settings: Any) -> LLMClient | None:
 
     if not getattr(settings, "llm_enabled", False):
         return None
+    if uses_openrouter(settings):
+        fast = settings.openrouter_fast_model
+        analysis = settings.openrouter_analysis_model
+        reasoning = settings.openrouter_reasoning_model
+        primary = fast if task in {"extraction", "writer"} else (
+            analysis if task == "analysis" else reasoning
+        )
+        return OpenRouterFreeLLM(
+            api_key=settings.openrouter_api_key,
+            models=[primary, analysis, "openrouter/free"], task=task,
+            timeout_seconds=settings.openrouter_timeout_seconds,
+            cache_ttl_seconds=settings.openrouter_cache_ttl_seconds,
+        )
     return OpenAICompatibleLLM(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
@@ -201,7 +354,9 @@ def build_llm_from_settings(settings: Any) -> LLMClient | None:
     )
 
 
-def build_llm_for_model(settings: Any, model: str) -> LLMClient | None:
+def build_llm_for_model(
+    settings: Any, model: str, task: LLMTask = "reasoning",
+) -> LLMClient | None:
     """Like ``build_llm_from_settings`` but pinned to a specific model.
 
     Used by multi-model features (e.g. the multi-agent Advisor) that run several
@@ -211,6 +366,8 @@ def build_llm_for_model(settings: Any, model: str) -> LLMClient | None:
 
     if not getattr(settings, "llm_enabled", False):
         return None
+    if uses_openrouter(settings):
+        return build_llm_from_settings(settings, task=task)
     return OpenAICompatibleLLM(
         base_url=settings.llm_base_url,
         model=model,
@@ -218,6 +375,13 @@ def build_llm_for_model(settings: Any, model: str) -> LLMClient | None:
         timeout_seconds=settings.llm_timeout_seconds,
         connect_timeout_seconds=getattr(settings, "llm_connect_timeout_seconds", 3.0),
     )
+
+
+def build_embedding_llm_from_settings(settings: Any) -> LLMClient | None:
+    """Keep free cloud chat separate from the existing local vector space."""
+    if uses_openrouter(settings):
+        return None
+    return build_llm_from_settings(settings)
 
 
 def extract_json_object(text: str) -> dict[str, Any]:

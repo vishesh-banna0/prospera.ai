@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.api.dependencies import get_prediction_service
 from backend.modules.prediction.application.dto import (
+    ForecastRequest,
+    MultiHorizonForecastView,
     PredictionsView,
     PredictionView,
     PredictRequest,
@@ -25,6 +27,43 @@ async def predict(
         return await service.predict(
             PredictRequest(
                 symbol=symbol, lookback_days=lookback_days, horizon_days=horizon_days
+            )
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/forecast/{symbol}", response_model=MultiHorizonForecastView)
+async def forecast(
+    symbol: str,
+    lookback_days: int = Query(default=730, ge=60, le=3650),
+    horizons: list[int] = Query(default=[1, 5, 21, 63]),
+    include_events: bool = Query(default=True),
+    service: PredictionService = Depends(get_prediction_service),
+) -> MultiHorizonForecastView:
+    """Forecast a symbol across several horizons at once.
+
+    Runs the hybrid ensemble — a logistic classifier on technical features, an
+    EWMA drift/volatility model, and an AR(1) model on log returns — pooling
+    their probabilities in log-odds space, then tilting the blend by the
+    recent news-event score for the symbol.
+
+    Defaults cover 1 day, 1 week, 1 month, and 1 quarter of trading days.
+    Reporting several horizons is deliberate: 1-day direction is close to a
+    coin flip and skill improves with horizon, so a single number invites
+    over-reading. Pass ``include_events=false`` for a price-only forecast,
+    which is the clean way to see what the news term actually contributed.
+
+    This endpoint does not persist — use ``POST /predictions/predict/{symbol}``
+    for a stored, single-horizon forecast.
+    """
+    try:
+        return await service.forecast(
+            ForecastRequest(
+                symbol=symbol,
+                lookback_days=lookback_days,
+                horizons=tuple(horizons),
+                include_events=include_events,
             )
         )
     except Exception as e:

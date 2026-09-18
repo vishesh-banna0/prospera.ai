@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 
 from backend.modules.advisor.application.dto import (
+    HoldingActionView,
+    PortfolioAdviceView,
     RecommendationView,
     SectorImpactView,
 )
@@ -54,6 +56,20 @@ class Analysis:
 class Strategy:
     short_term: tuple[RecommendationView, ...]
     long_term: tuple[RecommendationView, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioPosition:
+    """One held position, reduced to what the Advisor needs to reason about.
+
+    Deliberately not the simulator's ``Holding`` entity — the Advisor should
+    not depend on the simulator's value objects, only on symbol and size.
+    """
+
+    symbol: str
+    quantity: float
+    value: float
+    weight_pct: float
 
 
 def _event_target(event: NewsEvent) -> str:
@@ -114,7 +130,7 @@ class AnalystAgent:
     async def analyze(self, events: list[NewsEvent]) -> tuple[Analysis, str]:
         if self._llm is not None:
             try:
-                return await self._analyze_llm(events), self._model
+                return await self._analyze_llm(events), (getattr(self._llm, "last_model", None) or self._model)
             except Exception as exc:
                 logger.warning("Analyst LLM failed (%s); using deterministic.", exc)
         return _deterministic_analysis(events), DETERMINISTIC
@@ -192,7 +208,7 @@ class StrategistAgent:
     ) -> tuple[Strategy, str]:
         if self._llm is not None:
             try:
-                return await self._strategize_llm(analysis, events), self._model
+                return await self._strategize_llm(analysis, events), (getattr(self._llm, "last_model", None) or self._model)
             except Exception as exc:
                 logger.warning("Strategist LLM failed (%s); using deterministic.", exc)
         return _deterministic_strategy(analysis, events), DETERMINISTIC
@@ -218,15 +234,192 @@ class StrategistAgent:
 
 
 # ---------------------------------------------------------------------------
+# Portfolio agent — strategy + holdings -> per-position actions
+# ---------------------------------------------------------------------------
+
+# Absolute floor for calling a position oversized. Below this, a holding is
+# not a concentration risk no matter how few names the portfolio has.
+_CONCENTRATION_FLOOR_PCT = 25.0
+
+# ...but the floor alone is wrong for small portfolios: in a 2-stock book,
+# equal weight is 50% and flagging both halves would demand trimming into a
+# target that cannot exist. So a position is oversized only once it is also
+# half again as large as an equal-weight slice.
+_CONCENTRATION_EQUAL_WEIGHT_MULTIPLE = 1.5
+
+
+def _concentration_threshold(position_count: int) -> float:
+    """The weight above which a position dominates *this* portfolio."""
+
+    if position_count <= 0:
+        return _CONCENTRATION_FLOOR_PCT
+    equal_weight = 100.0 / position_count
+    return max(
+        _CONCENTRATION_FLOOR_PCT,
+        equal_weight * _CONCENTRATION_EQUAL_WEIGHT_MULTIPLE,
+    )
+
+_PORTFOLIO_SYSTEM = (
+    "You are a portfolio manager. You are given a market view (sector outlook "
+    "and buy/sell calls) and the investor's ACTUAL holdings with their weights. "
+    "Translate the market view into an action for each position they hold.\n"
+    "Rules:\n"
+    "- Only reference symbols in the holdings list. Do NOT invent positions.\n"
+    "- 'add' only if the view is positive AND the position is not already "
+    "oversized. 'trim' for an oversized position or a weakening view. 'exit' "
+    "for a fundamental problem. 'hold' when the view does not touch it — this "
+    "is the correct answer for most positions most of the time.\n"
+    "- Flag a position as a concentration risk when it is much larger than an "
+    "equal-weight slice of this portfolio, even if you like it.\n"
+    "- Name market calls the portfolio has NO exposure to as opportunities.\n"
+    "Respond with ONLY a JSON object:\n"
+    '{"summary": "<2-3 sentences about this portfolio>", "actions": '
+    '[{"symbol": str, "action": "add"|"trim"|"exit"|"hold", "rationale": str, '
+    '"driver": str, "confidence": 0..1}], "concentration_warnings": [str], '
+    '"unheld_opportunities": [str]}'
+)
+
+
+class PortfolioAgent:
+    """Maps the market-wide strategy onto the positions actually held.
+
+    This is what makes the Advisor portfolio-aware rather than a market
+    commentator: the Analyst and Strategist reason about the world, and this
+    agent answers "so what should *I* do, given what I own?". Positions the
+    market view says nothing about correctly come back as ``hold``.
+
+    Same shape as the other agents — its own model, its own deterministic
+    fallback — so an unavailable model degrades the answer instead of the
+    endpoint.
+    """
+
+    role = "portfolio"
+
+    def __init__(self, llm: LLMClient | None, model: str) -> None:
+        self._llm = llm
+        self._model = model
+
+    async def advise(
+        self,
+        strategy: Strategy,
+        positions: list[PortfolioPosition],
+        environment_id: str,
+    ) -> tuple[PortfolioAdviceView, str]:
+        if not positions:
+            return (
+                PortfolioAdviceView(
+                    environment_id=environment_id,
+                    holdings_count=0,
+                    summary="This portfolio holds no positions yet.",
+                ),
+                DETERMINISTIC,
+            )
+        if self._llm is not None:
+            try:
+                advice = await self._advise_llm(strategy, positions, environment_id)
+                return advice, (getattr(self._llm, "last_model", None) or self._model)
+            except Exception as exc:
+                logger.warning("Portfolio LLM failed (%s); using deterministic.", exc)
+        return (
+            _deterministic_portfolio_advice(strategy, positions, environment_id),
+            DETERMINISTIC,
+        )
+
+    async def _advise_llm(
+        self,
+        strategy: Strategy,
+        positions: list[PortfolioPosition],
+        environment_id: str,
+    ) -> PortfolioAdviceView:
+        user = (
+            "Holdings:\n"
+            + "\n".join(
+                f"- {p.symbol}: {p.weight_pct:.1f}% of portfolio "
+                f"({p.quantity:g} units)"
+                for p in positions
+            )
+            + "\n\nShort-term calls:\n"
+            + "\n".join(
+                f"- {r.action} {r.target} — {r.rationale}" for r in strategy.short_term
+            )
+            + "\n\nLong-term calls:\n"
+            + "\n".join(
+                f"- {r.action} {r.target} — {r.rationale}" for r in strategy.long_term
+            )
+        )
+        raw = await self._llm.complete(system=_PORTFOLIO_SYSTEM, user=user)
+        parsed = extract_json_object(raw)
+
+        held = {p.symbol.upper(): p for p in positions}
+        actions: list[HoldingActionView] = []
+        seen: set[str] = set()
+        for item in parsed.get("actions", []) or []:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol") or "").strip().upper()
+            # Hard guard against the model inventing positions.
+            if symbol not in held or symbol in seen:
+                continue
+            seen.add(symbol)
+            driver = item.get("driver")
+            actions.append(
+                HoldingActionView(
+                    symbol=symbol,
+                    action=_one_of(item.get("action"), _HOLDING_ACTIONS, "hold"),
+                    weight_pct=round(held[symbol].weight_pct, 2),
+                    rationale=str(item.get("rationale") or "").strip(),
+                    driver=str(driver).strip() if driver else None,
+                    confidence=_clamp_confidence(item.get("confidence")),
+                )
+            )
+
+        # Anything the model skipped is an implicit hold — never silently drop
+        # a position from the report.
+        for symbol, position in held.items():
+            if symbol in seen:
+                continue
+            actions.append(
+                HoldingActionView(
+                    symbol=symbol,
+                    action="hold",
+                    weight_pct=round(position.weight_pct, 2),
+                    rationale="No recent event in the market view touches this position.",
+                    confidence=0.4,
+                )
+            )
+
+        if not actions:
+            raise ValueError("Portfolio agent returned no usable actions.")
+
+        summary = str(parsed.get("summary") or "").strip()
+        return PortfolioAdviceView(
+            environment_id=environment_id,
+            holdings_count=len(positions),
+            actions=tuple(_sorted_actions(actions)),
+            concentration_warnings=_merge_concentration_warnings(
+                parsed.get("concentration_warnings"), positions
+            ),
+            unheld_opportunities=tuple(
+                str(o).strip()
+                for o in (parsed.get("unheld_opportunities") or [])
+                if str(o).strip()
+            )[:5],
+            summary=summary or _portfolio_summary(actions, positions),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Writer agent — analysis + strategy -> plain-English narrative
 # ---------------------------------------------------------------------------
 
 _WRITER_SYSTEM = (
     "You are an investment advisor writing for a retail investor. In 4-8 plain "
     "English sentences, summarize the recent news, which sectors are affected, "
-    "and the short-term vs long-term guidance. Be concrete and balanced. End "
-    "with: 'This is simulated guidance, not investment advice.' Respond with "
-    "plain text only."
+    "and the short-term vs long-term guidance. If the investor's own portfolio "
+    "positions are provided, address them directly — what to do and what to "
+    "leave alone — rather than speaking only about the market. Be concrete and "
+    "balanced. End with: 'This is simulated guidance, not investment advice.' "
+    "Respond with plain text only."
 )
 
 
@@ -239,18 +432,24 @@ class WriterAgent:
         self._llm = llm
         self._model = model
 
-    async def write(self, analysis: Analysis, strategy: Strategy) -> tuple[str, str]:
+    async def write(
+        self,
+        analysis: Analysis,
+        strategy: Strategy,
+        portfolio: PortfolioAdviceView | None = None,
+    ) -> tuple[str, str]:
         if self._llm is not None:
             try:
                 text = await self._llm.complete(
-                    system=_WRITER_SYSTEM, user=_writer_input(analysis, strategy)
+                    system=_WRITER_SYSTEM,
+                    user=_writer_input(analysis, strategy, portfolio),
                 )
                 text = text.strip()
                 if text:
-                    return text, self._model
+                    return text, (getattr(self._llm, "last_model", None) or self._model)
             except Exception as exc:
                 logger.warning("Writer LLM failed (%s); using deterministic.", exc)
-        return _deterministic_narrative(analysis, strategy), DETERMINISTIC
+        return _deterministic_narrative(analysis, strategy, portfolio), DETERMINISTIC
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +459,11 @@ class WriterAgent:
 _IMPACTS = ("positive", "negative", "mixed", "neutral")
 _MAGNITUDES = ("high", "medium", "low")
 _ACTIONS = ("buy", "sell", "hold", "avoid")
+_HOLDING_ACTIONS = ("add", "trim", "exit", "hold")
+
+# Report order: the actions that require doing something come first, and
+# "hold" (the common, do-nothing case) sinks to the bottom.
+_ACTION_PRIORITY = {"exit": 0, "trim": 1, "add": 2, "hold": 3}
 
 
 def _one_of(raw: object, allowed: tuple[str, ...], default: str) -> str:
@@ -479,7 +683,164 @@ def _deterministic_strategy(analysis: Analysis, events: list[NewsEvent]) -> Stra
     return Strategy(short_term=tuple(short[:6]), long_term=tuple(long[:6]))
 
 
-def _writer_input(analysis: Analysis, strategy: Strategy) -> str:
+def _sorted_actions(actions: list[HoldingActionView]) -> list[HoldingActionView]:
+    return sorted(
+        actions,
+        key=lambda a: (_ACTION_PRIORITY.get(a.action, 9), -a.weight_pct),
+    )
+
+
+def _concentration_warnings(positions: list[PortfolioPosition]) -> list[str]:
+    """Positions large enough to dominate the portfolio's outcome."""
+
+    threshold = _concentration_threshold(len(positions))
+    warnings = []
+    for position in sorted(positions, key=lambda p: -p.weight_pct):
+        if position.weight_pct >= threshold:
+            warnings.append(
+                f"{position.symbol} is {position.weight_pct:.1f}% of the "
+                "portfolio — a single-name shock would move the whole book."
+            )
+    return warnings
+
+
+def _merge_concentration_warnings(
+    raw: object,
+    positions: list[PortfolioPosition],
+) -> tuple[str, ...]:
+    """Model-written warnings plus the ones arithmetic guarantees.
+
+    Concentration is a fact about the weights, not a judgement call, so the
+    deterministic warnings are always included even when the LLM missed them.
+    """
+
+    model_warnings = [
+        str(w).strip() for w in (raw or []) if str(w).strip()
+    ]
+    computed = _concentration_warnings(positions)
+    # Keep computed ones first; they are the ones we can stand behind.
+    merged = computed + [w for w in model_warnings if w not in computed]
+    return tuple(merged[:5])
+
+
+def _portfolio_summary(
+    actions: list[HoldingActionView],
+    positions: list[PortfolioPosition],
+) -> str:
+    counts: dict[str, int] = {}
+    for action in actions:
+        counts[action.action] = counts.get(action.action, 0) + 1
+    moves = ", ".join(
+        f"{count} to {name}"
+        for name, count in sorted(counts.items(), key=lambda kv: _ACTION_PRIORITY.get(kv[0], 9))
+        if name != "hold"
+    )
+    if not moves:
+        return (
+            f"No recent event materially affects these {len(positions)} "
+            "positions — no action suggested."
+        )
+    return f"Across {len(positions)} positions: {moves}."
+
+
+def _deterministic_portfolio_advice(
+    strategy: Strategy,
+    positions: list[PortfolioPosition],
+    environment_id: str,
+) -> PortfolioAdviceView:
+    """Rule-based mapping of market calls onto held positions.
+
+    The mapping is deliberately conservative: a position is only acted on when
+    a call names it (by symbol) or names its sector. Everything else is a
+    hold, because "the market view is silent on this" is not a reason to
+    trade. Long-term calls take precedence over short-term ones for a position
+    already owned, since an existing holding is a long-term commitment.
+    """
+
+    held = {p.symbol.upper(): p for p in positions}
+    # Map each held symbol to the strongest call that names it. Long-term
+    # calls are applied last so they win where both exist.
+    call_by_symbol: dict[str, RecommendationView] = {}
+    for recommendation in (*strategy.short_term, *strategy.long_term):
+        target = recommendation.target.strip().upper()
+        if target in held:
+            call_by_symbol[target] = recommendation
+
+    threshold = _concentration_threshold(len(positions))
+    actions: list[HoldingActionView] = []
+    for symbol, position in held.items():
+        call = call_by_symbol.get(symbol)
+        oversized = position.weight_pct >= threshold
+
+        if call is None:
+            action, rationale = (
+                ("trim", "No fresh catalyst, and the position is oversized.")
+                if oversized
+                else ("hold", "No recent event in the market view touches this position.")
+            )
+            confidence = 0.4
+        elif call.action == "buy":
+            if oversized:
+                action = "hold"
+                rationale = (
+                    f"The view is positive ({call.rationale[:90]}), but at "
+                    f"{position.weight_pct:.1f}% this position is already large "
+                    "enough — adding would concentrate it further."
+                )
+            else:
+                action = "add"
+                rationale = call.rationale or "The market view favours this name."
+            confidence = call.confidence
+        elif call.action == "avoid":
+            action = "trim"
+            rationale = call.rationale or "The market view has turned against this name."
+            confidence = call.confidence
+        elif call.action == "sell":
+            action = "exit"
+            rationale = call.rationale or "The market view calls for exiting this name."
+            confidence = call.confidence
+        else:  # "hold"
+            action = "hold"
+            rationale = call.rationale or "The view is neutral on this position."
+            confidence = call.confidence
+
+        actions.append(
+            HoldingActionView(
+                symbol=symbol,
+                action=action,
+                weight_pct=round(position.weight_pct, 2),
+                rationale=rationale,
+                driver=call.target if call else None,
+                confidence=confidence,
+            )
+        )
+
+    # Buy calls on names the portfolio does not own are the opportunities.
+    opportunities = []
+    for recommendation in (*strategy.long_term, *strategy.short_term):
+        target = recommendation.target.strip()
+        if recommendation.action != "buy" or target.upper() in held:
+            continue
+        entry = f"{target} — {recommendation.rationale[:110]}"
+        if entry not in opportunities:
+            opportunities.append(entry)
+
+    sorted_actions = _sorted_actions(actions)
+    return PortfolioAdviceView(
+        environment_id=environment_id,
+        holdings_count=len(positions),
+        actions=tuple(sorted_actions),
+        concentration_warnings=tuple(_concentration_warnings(positions)[:5]),
+        unheld_opportunities=tuple(opportunities[:5]),
+        summary=_portfolio_summary(sorted_actions, positions),
+    )
+
+
+def _writer_input(
+    analysis: Analysis,
+    strategy: Strategy,
+    portfolio: PortfolioAdviceView | None = None,
+) -> str:
     lines = [f"Market summary: {analysis.market_summary}", "Sectors:"]
     lines += [f"- {s.sector}: {s.impact} ({s.magnitude})" for s in analysis.sectors]
     lines.append("Short-term calls:")
@@ -490,10 +851,24 @@ def _writer_input(analysis: Analysis, strategy: Strategy) -> str:
     lines += [
         f"- {r.action} {r.target} — {r.rationale}" for r in strategy.long_term
     ]
+    if portfolio is not None and portfolio.actions:
+        lines.append("The investor's actual positions and what to do with them:")
+        lines += [
+            f"- {a.action.upper()} {a.symbol} ({a.weight_pct:.1f}% of portfolio) "
+            f"— {a.rationale}"
+            for a in portfolio.actions
+        ]
+        if portfolio.concentration_warnings:
+            lines.append("Concentration risks:")
+            lines += [f"- {w}" for w in portfolio.concentration_warnings]
     return "\n".join(lines)
 
 
-def _deterministic_narrative(analysis: Analysis, strategy: Strategy) -> str:
+def _deterministic_narrative(
+    analysis: Analysis,
+    strategy: Strategy,
+    portfolio: PortfolioAdviceView | None = None,
+) -> str:
     parts = [analysis.market_summary]
     negative = [s.sector for s in analysis.sectors if s.impact == "negative"]
     positive = [s.sector for s in analysis.sectors if s.impact == "positive"]
@@ -513,13 +888,31 @@ def _deterministic_narrative(analysis: Analysis, strategy: Strategy) -> str:
             + "; ".join(f"{r.action} {r.target}" for r in strategy.long_term[:3])
             + "."
         )
+    if portfolio is not None and portfolio.actions:
+        actionable = [a for a in portfolio.actions if a.action != "hold"]
+        if actionable:
+            parts.append(
+                "For your portfolio: "
+                + "; ".join(f"{a.action} {a.symbol}" for a in actionable[:3])
+                + "."
+            )
+        else:
+            parts.append(
+                "For your portfolio: nothing in the recent news calls for a "
+                "change to your positions."
+            )
+        if portfolio.concentration_warnings:
+            parts.append(portfolio.concentration_warnings[0])
     parts.append("This is simulated guidance, not investment advice.")
     return " ".join(parts)
 
 
 # Purpose:
-# The multi-agent Advisor team: an Analyst, a Strategist, and a Writer, each on
-# its own local model, each with a deterministic fallback so the Advisor works
-# offline and never hard-fails. The dual-horizon logic (event-driven short-term
-# with exit triggers; transient-dip vs fundamental-problem long-term) lives in
-# both the LLM prompts and the deterministic rules.
+# The multi-agent Advisor team: an Analyst, a Strategist, a Portfolio manager,
+# and a Writer, each on its own local model, each with a deterministic fallback
+# so the Advisor works offline and never hard-fails. The dual-horizon logic
+# (event-driven short-term with exit triggers; transient-dip vs
+# fundamental-problem long-term) lives in both the LLM prompts and the
+# deterministic rules. The Portfolio agent is what turns a market view into
+# advice about positions the investor actually owns; it runs only when the
+# request supplies an environment, so the market-wide report is unchanged.

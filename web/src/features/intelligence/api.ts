@@ -4,6 +4,7 @@ import type {
   CompanyScoresView,
   FusedSignalView,
   FusedSignalsView,
+  MultiHorizonForecastView,
   PredictionView,
   PredictionsView,
   ReasonedOpinionView,
@@ -26,6 +27,20 @@ export const intelApi = {
     ),
   fuseSignal: (symbol: string) => api.post<FusedSignalView>(`/api/v1/signals/fuse/${enc(symbol)}`),
   reason: (symbol: string) => api.post<ReasonedOpinionView>(`/api/v1/reasoning/analyze/${enc(symbol)}`),
+
+  /**
+   * Multi-horizon hybrid forecast. Separate from `predict` above: that one
+   * computes and STORES a single-horizon forecast as part of the Analyze
+   * chain, while this one is a read-only look at several horizons at once and
+   * persists nothing. `include_events=false` re-runs it on price data alone,
+   * which is how the UI shows what the news actually contributed.
+   */
+  forecast: (symbol: string, includeEvents = true) =>
+    api.post<MultiHorizonForecastView>(
+      `/api/v1/predictions/forecast/${enc(symbol)}?lookback_days=730` +
+        `&horizons=1&horizons=5&horizons=21&horizons=63` +
+        `&include_events=${includeEvents}`,
+    ),
 
   // overview rankings
   companyScores: () => api.get<CompanyScoresView>("/api/v1/company/"),

@@ -32,6 +32,23 @@ export function useSignals() {
   });
 }
 
+/**
+ * The multi-horizon forecast for one symbol.
+ *
+ * A query, not a mutation: it only reads and computes, so revisiting the symbol
+ * should hit the cache. `includeEvents` is part of the key, so toggling the
+ * news tilt off fetches the price-only version once and then keeps both.
+ */
+export function useForecast(symbol: string, includeEvents: boolean) {
+  return useQuery({
+    queryKey: ["forecast", symbol, includeEvents],
+    queryFn: () => intelApi.forecast(symbol, includeEvents),
+    enabled: !!symbol,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
 export function useOpinions() {
   return useQuery({
     queryKey: ["intel-overview", "opinions"],

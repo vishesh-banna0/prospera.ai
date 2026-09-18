@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable
 from collections.abc import Callable
 from datetime import UTC
@@ -67,8 +68,15 @@ class EventExtractionService:
         articles = await self._select_articles(request)
 
         extracted: list[NewsEvent] = []
-        for article in articles:
-            extracted.extend(await self._extractor.extract_events(article))
+        # Articles are independent; keep only three extractions in flight.
+        # Read/write the request's SQL session outside the concurrent work.
+        for start in range(0, len(articles), 3):
+            batch = await asyncio.gather(*(
+                self._extractor.extract_events(article)
+                for article in articles[start:start + 3]
+            ))
+            for events in batch:
+                extracted.extend(events)
 
         deduplicated = self._deduplicate(extracted)
         stored_count = await self._event_repository.upsert_events(deduplicated)

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { SymbolSearch } from "@/features/markets/components/SymbolSearch";
 import { AnalyzeChain } from "@/features/intelligence/components/AnalyzeChain";
+import { ForecastPanel } from "@/features/intelligence/components/ForecastPanel";
 
 export default function IntelligenceSymbolPage() {
   const params = useParams<{ symbol: string }>();
@@ -27,6 +28,12 @@ export default function IntelligenceSymbolPage() {
       </div>
 
       <AnalyzeChain symbol={symbol} />
+
+      {/* Below the Analyze chain, not inside it: the chain is a fixed four-stage
+          sequence you step through, while this stands alone and loads on its own. */}
+      <div className="mt-4">
+        <ForecastPanel symbol={symbol} />
+      </div>
 
       <p className="mt-6 text-2xs text-fg-mute">
         See {symbol}&rsquo;s price and profile on{" "}

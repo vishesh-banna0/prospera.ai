@@ -16,6 +16,7 @@ from backend.api.routes import (
     reasoning,
     backtesting,
     advisor,
+    portfolio_optimization,
 )
 
 
@@ -37,6 +38,7 @@ def create_api_router() -> APIRouter:
     api_router.include_router(reasoning.router)
     api_router.include_router(backtesting.router)
     api_router.include_router(advisor.router)
+    api_router.include_router(portfolio_optimization.router)
 
     return api_router
 

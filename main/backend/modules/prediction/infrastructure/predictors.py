@@ -41,7 +41,15 @@ class LogisticBaselineModel(PredictionModelContract):
         self._iterations = iterations
         self._learning_rate = learning_rate
 
-    def predict(self, closes: Sequence[float], horizon_days: int = 1) -> ModelOutput:
+    def predict(
+        self,
+        closes: Sequence[float],
+        horizon_days: int = 1,
+        event_score: float = 0.0,
+    ) -> ModelOutput:
+        # event_score is accepted for contract compatibility and deliberately
+        # ignored: this model is trained on price features only. The ensemble
+        # is where news evidence enters the forecast.
         closes = [float(c) for c in closes]
         x_rows, y_rows, latest = build_dataset(closes, horizon=horizon_days)
 

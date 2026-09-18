@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,10 +81,15 @@ from backend.modules.events.infrastructure.extractors import RuleBasedEventExtra
 from backend.modules.events.infrastructure.llm_extractor import LLMEventExtractor
 from backend.modules.events.infrastructure.repositories import SqlNewsEventRepository
 
-from backend.shared.llm import build_llm_for_model, build_llm_from_settings
+from backend.shared.llm import (
+    build_embedding_llm_from_settings,
+    build_llm_for_model,
+    build_llm_from_settings,
+)
 
 from backend.modules.advisor.application.agents import (
     AnalystAgent,
+    PortfolioAgent,
     StrategistAgent,
     WriterAgent,
 )
@@ -95,6 +102,14 @@ from backend.modules.research.infrastructure.providers import (
     PlainTextParser,
 )
 from backend.modules.research.infrastructure.repositories import SqlResearchRepository
+from backend.modules.research.domain.repositories import ResearchRepository
+from backend.modules.research.infrastructure.faiss_index import (
+    FAISS_AVAILABLE,
+    FaissVectorIndex,
+)
+from backend.modules.research.infrastructure.faiss_repository import (
+    FaissResearchRepository,
+)
 
 from backend.modules.company.application.services import CompanyIntelligenceService
 from backend.modules.company.infrastructure.repositories import (
@@ -102,9 +117,13 @@ from backend.modules.company.infrastructure.repositories import (
 )
 
 from backend.modules.prediction.application.services import PredictionService
-from backend.modules.prediction.infrastructure.predictors import LogisticBaselineModel
+from backend.modules.prediction.infrastructure.ensemble import build_default_ensemble
 from backend.modules.prediction.infrastructure.repositories import (
     SqlPredictionRepository,
+)
+
+from backend.modules.portfolio.application.services import (
+    PortfolioOptimizationService,
 )
 
 from backend.modules.signals.application.services import SignalFusionService
@@ -122,6 +141,9 @@ from backend.modules.reasoning.infrastructure.repositories import (
 )
 
 from backend.modules.backtesting.application.services import BacktestService
+
+
+logger = logging.getLogger(__name__)
 
 
 # The request-scoped database session dependency now lives in
@@ -280,7 +302,7 @@ async def get_event_extraction_service(
     without changing the service, domain, or routes.
     """
     rule_based = RuleBasedEventExtractor()
-    llm = build_llm_from_settings(get_settings())
+    llm = build_llm_from_settings(get_settings(), task="extraction")
     # Use the LLM extractor when a model is configured (LLM_ENABLED=true),
     # falling back to the deterministic rule-based extractor on any failure.
     extractor = LLMEventExtractor(llm, fallback=rule_based) if llm else rule_based
@@ -293,6 +315,43 @@ async def get_event_extraction_service(
     )
 
 
+# One FAISS index per process, shared across requests and sessions. The
+# repository is per-request (it holds a DB session), but the index must not be
+# — rebuilding it on every request would defeat the point. Hydration from SQL
+# happens once, lazily, guarded by the index's own lock.
+_faiss_index: FaissVectorIndex | None = None
+
+
+def _get_faiss_index() -> FaissVectorIndex:
+    global _faiss_index
+    if _faiss_index is None:
+        _faiss_index = FaissVectorIndex()
+    return _faiss_index
+
+
+def build_research_repository(session: AsyncSession) -> ResearchRepository:
+    """Pick the retrieval backend named by RESEARCH_VECTOR_BACKEND.
+
+    Degrades rather than fails: if FAISS is requested but faiss-cpu is not
+    installed, this logs a warning and returns the SQL repository, which
+    produces the same ranking (just slower). Retrieval is never unavailable
+    because of a missing optional dependency.
+    """
+    sql_repository = SqlResearchRepository(session)
+    backend = (get_settings().research_vector_backend or "faiss").strip().lower()
+
+    if backend != "faiss":
+        return sql_repository
+    if not FAISS_AVAILABLE:
+        logger.warning(
+            "RESEARCH_VECTOR_BACKEND=faiss but faiss-cpu is not installed; "
+            "falling back to the SQL cosine backend. `pip install faiss-cpu` "
+            "to enable vector search."
+        )
+        return sql_repository
+    return FaissResearchRepository(sql_repository, _get_faiss_index())
+
+
 async def get_research_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> ResearchService:
@@ -300,13 +359,16 @@ async def get_research_service(
     Provide research RAG service.
 
     When an LLM is configured (LLM_ENABLED=true, the default), retrieval uses
-    real semantic embeddings from the OpenAI-compatible ``/embeddings`` endpoint
+    local semantic embeddings from the OpenAI-compatible ``/embeddings`` endpoint
     (Tier 5), falling back to the deterministic feature-hashing embedder if the
     endpoint is unreachable. With the LLM disabled, the hashing embedder is used
     directly — no model download, no network. The parser handles plain text.
+
+    Retrieval runs on FAISS by default (see ``build_research_repository``); the
+    SQL cosine scan stays available via RESEARCH_VECTOR_BACKEND=sql.
     """
     settings = get_settings()
-    llm = build_llm_from_settings(settings)
+    llm = build_embedding_llm_from_settings(settings)
     embedder = (
         LLMEmbedder(
             llm,
@@ -317,7 +379,7 @@ async def get_research_service(
         else HashingEmbedder()
     )
     return ResearchService(
-        repository=SqlResearchRepository(session),
+        repository=build_research_repository(session),
         embedder=embedder,
         parser=PlainTextParser(),
         commit=session.commit,
@@ -345,17 +407,23 @@ async def get_prediction_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> PredictionService:
     """
-    Provide the Phase 12 prediction service.
+    Provide the prediction service.
 
-    Uses the dependency-free logistic-regression baseline over price history
-    from the market data service. Swap in a trained model (sklearn/XGBoost/
-    deep) here behind the same PredictionModelContract to upgrade forecasts.
+    Uses the hybrid ensemble: a logistic-regression classifier on technical
+    features, an EWMA drift/volatility model, and an AR(1) model on log
+    returns, pooled in log-odds space and tilted by the recent news-event
+    score for the symbol (which is why the events repository is wired in).
+
+    Swap in a trained model (sklearn/XGBoost/deep) behind the same
+    PredictionModelContract, or add it as another ensemble member, without
+    touching the service.
     """
     return PredictionService(
         market_data_service=await get_market_data_service(session),
-        model=LogisticBaselineModel(),
+        model=build_default_ensemble(),
         repository=SqlPredictionRepository(session),
         commit=session.commit,
+        event_repository=SqlNewsEventRepository(session),
     )
 
 
@@ -416,28 +484,54 @@ async def get_backtest_service(
     )
 
 
+async def get_portfolio_optimization_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> PortfolioOptimizationService:
+    """
+    Provide the portfolio optimization + portfolio risk service.
+
+    Reads price history through the market data service and current positions
+    through the simulator's holding repository, so an optimization request can
+    be expressed either as a candidate basket of symbols or as "rebalance what
+    this environment actually holds".
+    """
+    return PortfolioOptimizationService(
+        market_data_service=await get_market_data_service(session),
+        holding_repository=SqlHoldingRepository(session),
+        environment_repository=SqlEnvironmentRepository(session),
+    )
+
+
 async def get_advisor_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> AdvisorService:
     """
     Provide the multi-agent AI Advisor service.
 
-    Builds the Analyst / Strategist / Writer agents — each on its own configured
-    local model (see ADVISOR_*_MODEL) — and wires them into the LangGraph agent
-    graph over the events warehouse. Any model that isn't reachable makes that
-    agent fall back to deterministic logic, so the Advisor always responds.
+    Builds the Analyst / Strategist / Portfolio / Writer agents — each on its
+    own task-specific model (OpenRouter or ADVISOR_*_MODEL locally) — and wires them into the
+    LangGraph agent graph over the events warehouse. Any model that isn't
+    reachable makes that agent fall back to deterministic logic, so the Advisor
+    always responds.
+
+    The Portfolio agent only runs when a request supplies an environment_id;
+    the holding repository is wired in here so it can read those positions.
     """
     settings = get_settings()
     analyst = AnalystAgent(
-        build_llm_for_model(settings, settings.advisor_analyst_model),
+        build_llm_for_model(settings, settings.advisor_analyst_model, task="analysis"),
         settings.advisor_analyst_model,
     )
     strategist = StrategistAgent(
-        build_llm_for_model(settings, settings.advisor_strategist_model),
+        build_llm_for_model(settings, settings.advisor_strategist_model, task="strategist"),
         settings.advisor_strategist_model,
     )
+    portfolio = PortfolioAgent(
+        build_llm_for_model(settings, settings.advisor_portfolio_model, task="portfolio"),
+        settings.advisor_portfolio_model,
+    )
     writer = WriterAgent(
-        build_llm_for_model(settings, settings.advisor_writer_model),
+        build_llm_for_model(settings, settings.advisor_writer_model, task="writer"),
         settings.advisor_writer_model,
     )
     return AdvisorService(
@@ -445,6 +539,8 @@ async def get_advisor_service(
         analyst=analyst,
         strategist=strategist,
         writer=writer,
+        portfolio=portfolio,
+        holding_repository=SqlHoldingRepository(session),
     )
 
 

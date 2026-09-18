@@ -1,6 +1,7 @@
 from functools import lru_cache  # For caching the settings instance to avoid redundant loading and parsing.
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field  # For defining fields in the Settings class with type validation and default values.
 # It handles datatype mismatches (like if a required field is age = "25" then it will convert it to 25 automatically)
@@ -99,6 +100,28 @@ class Settings(BaseSettings):
     # cooldown, so a missing LLM never repeatedly stalls requests. Set
     # LLM_ENABLED=false to force the deterministic path everywhere.
     llm_enabled: bool = Field(default=True, alias="LLM_ENABLED")
+    # auto selects OpenRouter when its key is present, otherwise the existing
+    # compatible endpoint. Separate settings keep old Ollama model IDs local.
+    llm_provider: Literal["auto", "openrouter", "compatible"] = Field(
+        default="auto", alias="LLM_PROVIDER"
+    )
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY", repr=False)
+    openrouter_fast_model: str = Field(
+        default="google/gemma-4-26b-a4b-it:free", alias="OPENROUTER_FAST_MODEL"
+    )
+    openrouter_analysis_model: str = Field(
+        default="google/gemma-4-31b-it:free", alias="OPENROUTER_ANALYSIS_MODEL"
+    )
+    openrouter_reasoning_model: str = Field(
+        default="nvidia/nemotron-3-super-120b-a12b:free",
+        alias="OPENROUTER_REASONING_MODEL",
+    )
+    openrouter_timeout_seconds: float = Field(
+        default=60.0, gt=0, alias="OPENROUTER_TIMEOUT_SECONDS"
+    )
+    openrouter_cache_ttl_seconds: float = Field(
+        default=300.0, ge=0, alias="OPENROUTER_CACHE_TTL_SECONDS"
+    )
     llm_base_url: str = Field(
         default="http://localhost:11434/v1",
         alias="LLM_BASE_URL",
@@ -120,6 +143,22 @@ class Settings(BaseSettings):
     llm_connect_timeout_seconds: float = Field(
         default=3.0,
         alias="LLM_CONNECT_TIMEOUT_SECONDS",
+    )
+
+    # --- Research retrieval backend ------------------------------------------
+    # Which vector store answers RAG queries.
+    #   "faiss" (default) — an in-process FAISS IndexFlatIP over L2-normalized
+    #     embeddings. Exact search, vectorized, and because the vectors are
+    #     normalized the inner-product scores ARE cosine similarities, so it
+    #     ranks identically to the SQL backend (asserted in the test suite).
+    #     SQL remains the durable store; the index is rebuilt from it lazily.
+    #   "sql" — the original Python cosine scan. O(n) per query, zero
+    #     dependencies. Kept as the fallback and the correctness reference.
+    # If faiss-cpu is not installed, this degrades to "sql" with a warning
+    # rather than failing startup.
+    research_vector_backend: str = Field(
+        default="faiss",
+        alias="RESEARCH_VECTOR_BACKEND",
     )
 
     # --- Authentication ------------------------------------------------------
@@ -152,6 +191,12 @@ class Settings(BaseSettings):
     advisor_writer_model: str = Field(
         default="qwen2.5:7b",
         alias="ADVISOR_WRITER_MODEL",
+    )
+    # Runs only when an advisory request names an environment: maps the market
+    # view onto the positions actually held (add / trim / exit / hold).
+    advisor_portfolio_model: str = Field(
+        default="llama3:8b",
+        alias="ADVISOR_PORTFOLIO_MODEL",
     )
 
     # --- News auto-sync (background scheduler) -------------------------------

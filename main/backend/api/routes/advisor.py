@@ -20,6 +20,12 @@ async def advisor_summary(
     Uses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its
     own local model, falling back to deterministic logic when a model is
     unavailable. This can take several seconds while the models run.
+
+    Pass ``environment_id`` to make the advice portfolio-aware: the graph
+    routes through a Portfolio agent that maps the market view onto the
+    positions that environment actually holds, returning add / trim / exit /
+    hold per position, concentration warnings, and the calls the portfolio has
+    no exposure to. Omit it for the market-wide report.
     """
     try:
         return await service.generate(request)

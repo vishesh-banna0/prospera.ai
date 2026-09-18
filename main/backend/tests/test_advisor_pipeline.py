@@ -7,6 +7,8 @@ import pytest
 from backend.modules.advisor.application.agents import (
     DETERMINISTIC,
     AnalystAgent,
+    PortfolioAgent,
+    PortfolioPosition,
     StrategistAgent,
     WriterAgent,
 )
@@ -164,6 +166,206 @@ async def test_energy_beneficiary_not_bought_for_both_horizons() -> None:
     long_buys = {r.target for r in strategy.long_term if r.action == "buy"}
     assert "XOM" in short_buys
     assert "XOM" not in long_buys  # the spike fades — not a long-term buy
+
+
+# ---------------------------------------------------------------------------
+# Portfolio-aware advice
+# ---------------------------------------------------------------------------
+
+
+class _FakeQuantity:
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+
+class _FakeCost:
+    def __init__(self, amount: float) -> None:
+        self.amount = amount
+
+
+class _FakeHolding:
+    def __init__(self, symbol: str, quantity: float, average_cost: float) -> None:
+        self.symbol = symbol
+        self.quantity = _FakeQuantity(quantity)
+        self.average_cost = _FakeCost(average_cost)
+
+
+class _FakeHoldingRepository:
+    def __init__(self, holdings: list[_FakeHolding]) -> None:
+        self._holdings = holdings
+
+    async def list_by_environment(self, environment_id):
+        return self._holdings
+
+
+class _BrokenHoldingRepository:
+    async def list_by_environment(self, environment_id):
+        raise RuntimeError("database is down")
+
+
+async def _service_with_holdings(holdings, repo_override=None) -> AdvisorService:
+    repo = InMemoryNewsEventRepository()
+    await repo.upsert_events(
+        [
+            _event(
+                "g1",
+                EventType.GEOPOLITICAL,
+                Sentiment.NEGATIVE,
+                EventImportance.HIGH,
+                "Oil spikes on Middle East conflict",
+                symbols=("RELIANCE.NS",),
+                sectors=("Energy",),
+            ),
+            _event(
+                "e1",
+                EventType.EARNINGS_MISS,
+                Sentiment.NEGATIVE,
+                EventImportance.HIGH,
+                "ACME misses earnings badly as demand collapses",
+                symbols=("ACME",),
+                sectors=("Technology",),
+            ),
+        ]
+    )
+    return AdvisorService(
+        event_repository=repo,
+        analyst=AnalystAgent(None, "m-analyst"),
+        strategist=StrategistAgent(None, "m-strategist"),
+        writer=WriterAgent(None, "m-writer"),
+        portfolio=PortfolioAgent(None, "m-portfolio"),
+        holding_repository=(
+            repo_override
+            if repo_override is not None
+            else _FakeHoldingRepository(holdings)
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_advice_is_market_wide_when_no_environment_is_given() -> None:
+    """The portfolio node must not run — the original behaviour is preserved."""
+    service = await _service_with_holdings([_FakeHolding("ACME", 10, 100.0)])
+
+    report = await service.generate(AdvisorRequest(max_events=20))
+
+    assert report.portfolio is None
+    assert "portfolio" not in report.models
+
+
+@pytest.mark.asyncio
+async def test_portfolio_pass_maps_market_calls_onto_held_positions() -> None:
+    holdings = [
+        _FakeHolding("ACME", quantity=60, average_cost=100.0),  # 60% — oversized
+        _FakeHolding("RELIANCE.NS", quantity=20, average_cost=100.0),  # 20%
+        _FakeHolding("UNRELATED", quantity=20, average_cost=100.0),  # 20%
+    ]
+    service = await _service_with_holdings(holdings)
+
+    report = await service.generate(
+        AdvisorRequest(max_events=20, environment_id="env-1")
+    )
+
+    assert report.portfolio is not None
+    assert report.models["portfolio"] == DETERMINISTIC
+    advice = report.portfolio
+    assert advice.environment_id == "env-1"
+    assert advice.holdings_count == 3
+
+    by_symbol = {a.symbol: a for a in advice.actions}
+    # Every held position is reported, none invented.
+    assert set(by_symbol) == {"ACME", "RELIANCE.NS", "UNRELATED"}
+    # ACME has a fundamental problem (earnings miss) -> reduce, not accumulate.
+    assert by_symbol["ACME"].action in ("trim", "exit")
+    # No event touches UNRELATED, so the correct answer is to do nothing.
+    assert by_symbol["UNRELATED"].action == "hold"
+    # Weights are computed from cost basis and reported per position.
+    assert by_symbol["ACME"].weight_pct == pytest.approx(60.0, abs=0.1)
+
+    # 60% in one name is a concentration risk regardless of the thesis.
+    assert any("ACME" in warning for warning in advice.concentration_warnings)
+    # Actionable items sort ahead of holds.
+    assert advice.actions[-1].action == "hold"
+    assert advice.summary
+
+
+@pytest.mark.asyncio
+async def test_positive_call_on_an_oversized_position_does_not_add() -> None:
+    """A good thesis is not a reason to concentrate further."""
+    strategy_source = await _service_with_holdings(
+        [_FakeHolding("RELIANCE.NS", quantity=90, average_cost=100.0),
+         _FakeHolding("OTHER", quantity=10, average_cost=100.0)]
+    )
+
+    report = await strategy_source.generate(
+        AdvisorRequest(max_events=20, environment_id="env-1")
+    )
+
+    action = next(
+        a for a in report.portfolio.actions if a.symbol == "RELIANCE.NS"
+    )
+    # The short-term view on Energy is positive, but the position is 90%.
+    assert action.action != "add"
+    assert "already large" in action.rationale or action.action in ("trim", "hold")
+
+
+@pytest.mark.asyncio
+async def test_unheld_buy_calls_surface_as_opportunities() -> None:
+    service = await _service_with_holdings(
+        [_FakeHolding("UNRELATED", quantity=10, average_cost=100.0),
+         _FakeHolding("OTHER", quantity=10, average_cost=100.0)]
+    )
+
+    report = await service.generate(
+        AdvisorRequest(max_events=20, environment_id="env-1")
+    )
+
+    opportunities = " ".join(report.portfolio.unheld_opportunities)
+    # RELIANCE.NS is a buy call the portfolio has no exposure to.
+    assert "RELIANCE.NS" in opportunities
+
+
+@pytest.mark.asyncio
+async def test_holdings_failure_degrades_to_market_wide_advice() -> None:
+    service = await _service_with_holdings([], repo_override=_BrokenHoldingRepository())
+
+    report = await service.generate(
+        AdvisorRequest(max_events=20, environment_id="env-1")
+    )
+
+    # The report still arrives; it just has no portfolio section.
+    assert report.portfolio is None
+    assert report.event_count == 2
+    assert report.narrative
+
+
+@pytest.mark.asyncio
+async def test_empty_portfolio_skips_the_portfolio_node() -> None:
+    service = await _service_with_holdings([])
+
+    report = await service.generate(
+        AdvisorRequest(max_events=20, environment_id="env-empty")
+    )
+
+    assert report.portfolio is None
+
+
+@pytest.mark.asyncio
+async def test_portfolio_agent_reports_every_position_even_when_unaffected() -> None:
+    positions = [
+        PortfolioPosition("AAA", quantity=1, value=100.0, weight_pct=50.0),
+        PortfolioPosition("BBB", quantity=1, value=100.0, weight_pct=50.0),
+    ]
+    strategy, _ = await StrategistAgent(None, "m").strategize(
+        (await AnalystAgent(None, "m").analyze([]))[0], []
+    )
+
+    advice, source = await PortfolioAgent(None, "m").advise(
+        strategy, positions, "env-1"
+    )
+
+    assert source == DETERMINISTIC
+    assert {a.symbol for a in advice.actions} == {"AAA", "BBB"}
+    assert all(a.action == "hold" for a in advice.actions)
 
 
 @pytest.mark.asyncio

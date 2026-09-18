@@ -119,6 +119,10 @@ class InMemoryResearchRepository(ResearchRepository):
             "chunks": len(self._chunks),
         }
 
+    async def list_all_chunks(self) -> list[DocumentChunk]:
+        """Every stored chunk — used to warm a vector index (see ChunkSource)."""
+        return list(self._chunks.values())
+
     def _document_matches(
         self,
         document: ResearchDocument,
@@ -259,6 +263,17 @@ class SqlResearchRepository(ResearchRepository):
             "documents": int(documents_result.scalar_one() or 0),
             "chunks": int(chunks_result.scalar_one() or 0),
         }
+
+    async def list_all_chunks(self) -> list[DocumentChunk]:
+        """Every stored chunk, for warming a vector index (see ChunkSource).
+
+        Deliberately unpaginated: it runs once per process at index hydration,
+        not per query. If the corpus outgrows memory, that is the point to move
+        to an index that persists its own vectors (or pgvector) rather than to
+        paginate this.
+        """
+        result = await self._session.execute(select(DocumentChunkModel))
+        return [self._model_to_chunk(model) for model in result.scalars().all()]
 
     def _document_to_model(
         self,

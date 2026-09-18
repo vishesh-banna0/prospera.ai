@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC
 from datetime import datetime
 
@@ -41,6 +42,40 @@ def _article(
         symbols=symbols,
         sectors=sectors,
     )
+
+
+@pytest.mark.asyncio
+async def test_extraction_parallelism_is_bounded_and_all_articles_are_stored():
+    article_repo = InMemoryNewsArticleRepository()
+    await article_repo.upsert_articles([
+        _article(str(i), f"Company {i} beats earnings estimates") for i in range(7)
+    ])
+    full, release = asyncio.Event(), asyncio.Event()
+    active = peak = 0
+
+    class DelayedExtractor(RuleBasedEventExtractor):
+        async def extract_events(self, article):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            if active == 3:
+                full.set()
+            try:
+                await release.wait()
+                return await super().extract_events(article)
+            finally:
+                active -= 1
+
+    repository = InMemoryNewsEventRepository()
+    service = EventExtractionService(article_repo, repository, DelayedExtractor())
+    work = asyncio.create_task(service.extract_events(ExtractEventsRequest()))
+    await asyncio.wait_for(full.wait(), 1)
+    assert active == 3
+    assert (await service.get_stats()).total_events == 0
+    release.set()
+    result = await work
+    assert peak == 3
+    assert result.processed_count == result.stored_count == 7
 
 
 @pytest.mark.asyncio

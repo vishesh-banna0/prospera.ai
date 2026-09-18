@@ -2466,6 +2466,89 @@
         }
       }
     },
+    "/api/v1/predictions/forecast/{symbol}": {
+      "post": {
+        "tags": [
+          "predictions"
+        ],
+        "summary": "Forecast",
+        "description": "Forecast a symbol across several horizons at once.\n\nRuns the hybrid ensemble \u2014 a logistic classifier on technical features, an\nEWMA drift/volatility model, and an AR(1) model on log returns \u2014 pooling\ntheir probabilities in log-odds space, then tilting the blend by the\nrecent news-event score for the symbol.\n\nDefaults cover 1 day, 1 week, 1 month, and 1 quarter of trading days.\nReporting several horizons is deliberate: 1-day direction is close to a\ncoin flip and skill improves with horizon, so a single number invites\nover-reading. Pass ``include_events=false`` for a price-only forecast,\nwhich is the clean way to see what the news term actually contributed.\n\nThis endpoint does not persist \u2014 use ``POST /predictions/predict/{symbol}``\nfor a stored, single-horizon forecast.",
+        "operationId": "forecast_api_v1_predictions_forecast__symbol__post",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Symbol"
+            }
+          },
+          {
+            "name": "lookback_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 3650,
+              "minimum": 60,
+              "default": 730,
+              "title": "Lookback Days"
+            }
+          },
+          {
+            "name": "horizons",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "default": [
+                1,
+                5,
+                21,
+                63
+              ],
+              "title": "Horizons"
+            }
+          },
+          {
+            "name": "include_events",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Events"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultiHorizonForecastView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/predictions/": {
       "get": {
         "tags": [
@@ -2945,7 +3028,7 @@
           "advisor"
         ],
         "summary": "Advisor Summary",
-        "description": "Run the multi-agent Advisor over recent events and return short/long-term\nguidance plus a plain-English readout.\n\nUses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its\nown local model, falling back to deterministic logic when a model is\nunavailable. This can take several seconds while the models run.",
+        "description": "Run the multi-agent Advisor over recent events and return short/long-term\nguidance plus a plain-English readout.\n\nUses a LangGraph agent team (Analyst -> Strategist -> Writer), each on its\nown local model, falling back to deterministic logic when a model is\nunavailable. This can take several seconds while the models run.\n\nPass ``environment_id`` to make the advice portfolio-aware: the graph\nroutes through a Portfolio agent that maps the market view onto the\npositions that environment actually holds, returning add / trim / exit /\nhold per position, concentration warnings, and the calls the portfolio has\nno exposure to. Omit it for the market-wide report.",
         "operationId": "advisor_summary_api_v1_advisor_summary_post",
         "requestBody": {
           "content": {
@@ -2964,6 +3047,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdvisorReportView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolio/optimize": {
+      "post": {
+        "tags": [
+          "portfolio-optimization"
+        ],
+        "summary": "Optimize Portfolio",
+        "description": "Solve for target portfolio weights and explain the resulting risk.\n\nObjectives: ``max_sharpe`` (default), ``min_variance``,\n``inverse_volatility``, ``equal_weight``. All are long-only and fully\ninvested, with ``max_weight`` capping any single position.\n\nPass ``symbols`` to optimize a candidate basket, or ``environment_id`` to\noptimize what a simulator environment actually holds \u2014 in which case the\nresponse also carries current weights and the rebalancing trades that\nwould reach the target.\n\nEvery result reports an equal-weight baseline alongside it, so it is\nvisible whether the optimization actually earned its estimation error.",
+        "operationId": "optimize_portfolio_api_v1_portfolio_optimize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptimizePortfolioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioOptimizationView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolio/risk": {
+      "post": {
+        "tags": [
+          "portfolio-optimization"
+        ],
+        "summary": "Analyze Portfolio Risk",
+        "description": "Risk decomposition of an environment's holdings exactly as they stand.\n\nReports portfolio volatility, Sharpe, diversification ratio, effective\nnumber of assets, max drawdown, the correlation matrix, and each\nposition's share of total risk \u2014 which is not the same as its share of\ncapital. Concentration warnings call out positions that dominate either.",
+        "operationId": "analyze_portfolio_risk_api_v1_portfolio_risk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioRiskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioRiskView"
                 }
               }
             }
@@ -3055,6 +3222,16 @@
             "type": "string",
             "title": "Source",
             "default": "deterministic"
+          },
+          "portfolio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioAdviceView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3075,10 +3252,76 @@
             "type": "integer",
             "title": "Max Events",
             "default": 40
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
           }
         },
         "type": "object",
         "title": "AdvisorRequest"
+      },
+      "AllocationView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "target_weight_pct": {
+            "type": "number",
+            "title": "Target Weight Pct"
+          },
+          "current_weight_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Weight Pct"
+          },
+          "weight_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Change Pct"
+          },
+          "risk_contribution_pct": {
+            "type": "number",
+            "title": "Risk Contribution Pct",
+            "default": 0.0
+          },
+          "annualized_return_pct": {
+            "type": "number",
+            "title": "Annualized Return Pct",
+            "default": 0.0
+          },
+          "annualized_volatility_pct": {
+            "type": "number",
+            "title": "Annualized Volatility Pct",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "target_weight_pct"
+        ],
+        "title": "AllocationView"
       },
       "AuthTokenView": {
         "properties": {
@@ -3446,6 +3689,27 @@
           "count"
         ],
         "title": "CompanyScoresView"
+      },
+      "CorrelationRowView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "correlations": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Correlations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "correlations"
+        ],
+        "title": "CorrelationRowView"
       },
       "CreateEnvironmentInput": {
         "properties": {
@@ -4129,6 +4393,50 @@
         ],
         "title": "HistoricalPriceSeriesView"
       },
+      "HoldingActionView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "weight_pct": {
+            "type": "number",
+            "title": "Weight Pct"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "driver": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.5
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "action",
+          "weight_pct",
+          "rationale"
+        ],
+        "title": "HoldingActionView"
+      },
       "HoldingView": {
         "properties": {
           "symbol": {
@@ -4184,6 +4492,39 @@
           "average_cost"
         ],
         "title": "HoldingView"
+      },
+      "HorizonForecastView": {
+        "properties": {
+          "horizon_days": {
+            "type": "integer",
+            "title": "Horizon Days"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "probability_up": {
+            "type": "number",
+            "title": "Probability Up"
+          },
+          "expected_return_pct": {
+            "type": "number",
+            "title": "Expected Return Pct"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horizon_days",
+          "direction",
+          "probability_up",
+          "expected_return_pct",
+          "confidence"
+        ],
+        "title": "HorizonForecastView"
       },
       "IngestDocumentRequest": {
         "properties": {
@@ -4546,6 +4887,60 @@
         ],
         "title": "Money"
       },
+      "MultiHorizonForecastView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "forecasts": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonForecastView"
+            },
+            "type": "array",
+            "title": "Forecasts"
+          },
+          "event_score": {
+            "type": "number",
+            "title": "Event Score",
+            "default": 0.0
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count",
+            "default": 0
+          },
+          "observations": {
+            "type": "integer",
+            "title": "Observations",
+            "default": 0
+          },
+          "features": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "as_of",
+          "model_name",
+          "forecasts"
+        ],
+        "title": "MultiHorizonForecastView"
+      },
       "NewsArticleView": {
         "properties": {
           "article_id": {
@@ -4755,6 +5150,51 @@
         ],
         "title": "NewsWarehouseStatsView"
       },
+      "OptimizePortfolioRequest": {
+        "properties": {
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symbols",
+            "default": []
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective",
+            "default": "max_sharpe"
+          },
+          "lookback_days": {
+            "type": "integer",
+            "title": "Lookback Days",
+            "default": 365
+          },
+          "risk_free_rate": {
+            "type": "number",
+            "title": "Risk Free Rate",
+            "default": 0.0
+          },
+          "max_weight": {
+            "type": "number",
+            "title": "Max Weight",
+            "default": 0.35
+          }
+        },
+        "type": "object",
+        "title": "OptimizePortfolioRequest"
+      },
       "OwnerType": {
         "type": "string",
         "enum": [
@@ -4764,6 +5204,168 @@
           "backtest"
         ],
         "title": "OwnerType"
+      },
+      "PortfolioAdviceView": {
+        "properties": {
+          "environment_id": {
+            "type": "string",
+            "title": "Environment Id"
+          },
+          "holdings_count": {
+            "type": "integer",
+            "title": "Holdings Count"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingActionView"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "concentration_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concentration Warnings"
+          },
+          "unheld_opportunities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unheld Opportunities"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "environment_id",
+          "holdings_count"
+        ],
+        "title": "PortfolioAdviceView"
+      },
+      "PortfolioMetricsView": {
+        "properties": {
+          "expected_return_pct": {
+            "type": "number",
+            "title": "Expected Return Pct"
+          },
+          "volatility_pct": {
+            "type": "number",
+            "title": "Volatility Pct"
+          },
+          "sharpe_ratio": {
+            "type": "number",
+            "title": "Sharpe Ratio"
+          },
+          "diversification_ratio": {
+            "type": "number",
+            "title": "Diversification Ratio"
+          },
+          "effective_number_of_assets": {
+            "type": "number",
+            "title": "Effective Number Of Assets"
+          },
+          "max_drawdown_pct": {
+            "type": "number",
+            "title": "Max Drawdown Pct"
+          },
+          "historical_return_pct": {
+            "type": "number",
+            "title": "Historical Return Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_return_pct",
+          "volatility_pct",
+          "sharpe_ratio",
+          "diversification_ratio",
+          "effective_number_of_assets",
+          "max_drawdown_pct",
+          "historical_return_pct"
+        ],
+        "title": "PortfolioMetricsView"
+      },
+      "PortfolioOptimizationView": {
+        "properties": {
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symbols"
+          },
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationView"
+            },
+            "type": "array",
+            "title": "Allocations"
+          },
+          "optimized": {
+            "$ref": "#/components/schemas/PortfolioMetricsView"
+          },
+          "equal_weight_baseline": {
+            "$ref": "#/components/schemas/PortfolioMetricsView"
+          },
+          "correlations": {
+            "items": {
+              "$ref": "#/components/schemas/CorrelationRowView"
+            },
+            "type": "array",
+            "title": "Correlations",
+            "default": []
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/RebalanceTradeView"
+            },
+            "type": "array",
+            "title": "Trades",
+            "default": []
+          },
+          "observations": {
+            "type": "integer",
+            "title": "Observations",
+            "default": 0
+          },
+          "lookback_days": {
+            "type": "integer",
+            "title": "Lookback Days",
+            "default": 0
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "INR"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "objective",
+          "symbols",
+          "allocations",
+          "optimized",
+          "equal_weight_baseline"
+        ],
+        "title": "PortfolioOptimizationView"
       },
       "PortfolioPerformanceView": {
         "properties": {
@@ -4802,6 +5404,88 @@
           "return_percentage"
         ],
         "title": "PortfolioPerformanceView"
+      },
+      "PortfolioRiskRequest": {
+        "properties": {
+          "environment_id": {
+            "type": "string",
+            "title": "Environment Id"
+          },
+          "lookback_days": {
+            "type": "integer",
+            "title": "Lookback Days",
+            "default": 365
+          },
+          "risk_free_rate": {
+            "type": "number",
+            "title": "Risk Free Rate",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "environment_id"
+        ],
+        "title": "PortfolioRiskRequest"
+      },
+      "PortfolioRiskView": {
+        "properties": {
+          "environment_id": {
+            "type": "string",
+            "title": "Environment Id"
+          },
+          "symbols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Symbols"
+          },
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationView"
+            },
+            "type": "array",
+            "title": "Allocations"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/PortfolioMetricsView"
+          },
+          "correlations": {
+            "items": {
+              "$ref": "#/components/schemas/CorrelationRowView"
+            },
+            "type": "array",
+            "title": "Correlations",
+            "default": []
+          },
+          "concentration_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Concentration Warnings",
+            "default": []
+          },
+          "observations": {
+            "type": "integer",
+            "title": "Observations",
+            "default": 0
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "INR"
+          }
+        },
+        "type": "object",
+        "required": [
+          "environment_id",
+          "symbols",
+          "allocations",
+          "metrics"
+        ],
+        "title": "PortfolioRiskView"
       },
       "PredictionView": {
         "properties": {
@@ -5053,6 +5737,34 @@
           "count"
         ],
         "title": "ReasonedOpinionsView"
+      },
+      "RebalanceTradeView": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "action",
+          "amount",
+          "reason"
+        ],
+        "title": "RebalanceTradeView"
       },
       "RecommendationView": {
         "properties": {

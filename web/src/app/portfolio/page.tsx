@@ -15,6 +15,8 @@ import { TransactionsPanel } from "@/features/portfolio/components/TransactionsP
 import { CashDesk } from "@/features/portfolio/components/CashDesk";
 import { TradeDesk } from "@/features/portfolio/components/TradeDesk";
 import { SipPanel } from "@/features/portfolio/components/SipPanel";
+import { OptimizerPanel } from "@/features/portfolio/components/OptimizerPanel";
+import { RiskPanel } from "@/features/portfolio/components/RiskPanel";
 import { CreatePortfolioForm } from "@/features/portfolio/components/CreatePortfolioForm";
 
 export default function PortfolioPage() {
@@ -123,6 +125,9 @@ function Dashboard({
       </div>
       <SipPanel id={id} />
       <HoldingsPanel id={id} />
+      {/* Both read holdings, so they sit under the holdings table they describe. */}
+      <RiskPanel id={id} />
+      <OptimizerPanel id={id} />
       <TransactionsPanel id={id} />
     </div>
   );
